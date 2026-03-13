@@ -1,0 +1,25 @@
+{
+  "name": "@sanson/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "fastify": "^5.0.0",
+    "pg": "^8.0.0"
+  },
+  "devDependencies": {
+    "@testcontainers/postgresql": "^10.0.0",
+    "@types/node": "^24.0.0",
+    "@types/pg": "^8.0.0",
+    "testcontainers": "^10.0.0",
+    "tsx": "^4.0.0",
+    "vitest": "^2.0.0"
+  }
+}
