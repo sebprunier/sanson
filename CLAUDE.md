@@ -67,11 +67,22 @@ pnpm --filter @sanson/admin e2e:headed      # same, with visible browser
 - `hookTimeout: 120_000` in vitest config — container pull can be slow on first run
 - Test file structure mirrors source: `test/routes/health.test.ts` for `src/routes/health.ts`
 
+## E2E testing conventions
+
+- **Playwright** with Chromium, test files in `apps/admin/e2e/`
+- **WebGL in headless** — Chromium launch args `--use-gl=angle --use-angle=swiftshader` (required for MapLibre GL)
+- `fullyParallel: false` — tests run sequentially within each file
+- `reuseExistingServer: true` — E2E tests use already-running API + UI dev servers
+- Use `{ exact: true }` on `getByRole`/`getByText` when MapLibre buttons may conflict (e.g., `{ name: 'Map', exact: true }`)
+
 ## Key architectural decisions
 
 - **OGC API Features URLs** — collections are identified as `{workspaceName}:{layerName}` (e.g., `default:centrales`)
 - **Default workspace** — always exists, created in `scripts/init.sql`
-- **Synchronous GeoJSON import** — direct parsing + insert via `ST_GeomFromGeoJSON`. Async worker with pg-boss planned for later.
+- **Synchronous GeoJSON import** — direct parsing + insert via `ST_GeomFromGeoJSON`. Each import is recorded in `sanson_import_history`. Async worker with pg-boss planned for later.
+- **CQL2 Text parser** — recursive descent parser in `packages/api/src/cql2.ts`, outputs parameterized SQL. Validates column names against `information_schema.columns`.
+- **OGC datetime filter** — `?datetime=` supports instant, interval, and open-ended bounds (`..`). Requires `datetime_column` to be configured on the layer.
+- **OGC pagination** — `first`/`last`/`next`/`prev` links in body + `Link` header + `X-Total-Count`. All query params (bbox, datetime, filter) are preserved in pagination links.
 - **WGS84 (EPSG:4326) by default** for API output
 - **Table prefix `sanson_`** for metadata tables (workspaces, layers, import history) — no dedicated schema for now, revisit later if needed
 - **Vite proxy** — admin UI dev server on port 5173 proxies `/api`, `/collections`, `/conformance`, `/health` to API on port 3000
