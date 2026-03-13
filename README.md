@@ -1,6 +1,22 @@
-# Sanson
+<p align="center">
+  <img src=".github/logo.png" alt="Sanson" width="200" />
+</p>
 
-An open source geospatial server that exposes geographic data stored in PostgreSQL/PostGIS via clean, modern REST APIs — compliant with **OGC API — Features**.
+<h1 align="center">Sanson</h1>
+
+<p align="center">
+  An open source geospatial server — OGC API Features compliant
+</p>
+
+<p align="center">
+  <a href="https://github.com/sebprunier/sanson/actions/workflows/ci.yml"><img src="https://github.com/sebprunier/sanson/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/github/license/sebprunier/sanson" alt="License" /></a>
+  <a href=".nvmrc"><img src="https://img.shields.io/badge/node-%3E%3D24-brightgreen" alt="Node.js" /></a>
+</p>
+
+---
+
+Sanson exposes geographic data stored in PostgreSQL/PostGIS via clean, modern REST APIs — compliant with **OGC API — Features**.
 
 > Named after **Nicolas Sanson** (1600–1667), father of French cartography and royal geographer to Louis XIII and Louis XIV.
 
