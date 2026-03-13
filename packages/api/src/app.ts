@@ -5,6 +5,8 @@ import { rootRoutes } from './routes/root'
 import { conformanceRoutes } from './routes/conformance'
 import { collectionsRoutes } from './routes/collections'
 import { apiRoutes } from './routes/api'
+import { adminWorkspacesRoutes } from './routes/admin/workspaces'
+import { adminLayersRoutes } from './routes/admin/layers'
 import { healthRoutes } from './routes/health'
 
 interface AppOptions {
@@ -35,6 +37,8 @@ export function buildApp(db: Pool, options: AppOptions = {}): FastifyInstance {
   app.register(rootRoutes)
   app.register(conformanceRoutes)
   app.register(collectionsRoutes, { db })
+  app.register(adminWorkspacesRoutes, { db })
+  app.register(adminLayersRoutes, { db })
   app.register(apiRoutes)
   app.register(healthRoutes, { db })
 
