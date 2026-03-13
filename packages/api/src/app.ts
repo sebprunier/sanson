@@ -1,6 +1,7 @@
 import Fastify, { FastifyInstance } from 'fastify'
 import { Pool } from 'pg'
 import { rootRoutes } from './routes/root'
+import { conformanceRoutes } from './routes/conformance'
 import { healthRoutes } from './routes/health'
 
 interface AppOptions {
@@ -15,6 +16,7 @@ export function buildApp(db: Pool, options: AppOptions = {}): FastifyInstance {
   })
 
   app.register(rootRoutes)
+  app.register(conformanceRoutes)
   app.register(healthRoutes, { db })
 
   return app
