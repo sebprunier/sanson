@@ -1,10 +1,18 @@
 import Fastify, { FastifyInstance } from 'fastify'
 import { Pool } from 'pg'
-import { rootRoutes } from './routes/root.js'
-import { healthRoutes } from './routes/health.js'
+import { rootRoutes } from './routes/root'
+import { healthRoutes } from './routes/health'
 
-export function buildApp(db: Pool): FastifyInstance {
-  const app = Fastify({ logger: false })
+interface AppOptions {
+  logger?: boolean
+}
+
+export function buildApp(db: Pool, options: AppOptions = {}): FastifyInstance {
+  const app = Fastify({ logger: options.logger ?? false })
+
+  app.addHook('onClose', async () => {
+    await db.end()
+  })
 
   app.register(rootRoutes)
   app.register(healthRoutes, { db })

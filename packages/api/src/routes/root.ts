@@ -20,6 +20,12 @@ export async function rootRoutes(app: FastifyInstance): Promise<void> {
       description: 'An open source geospatial server — OGC API Features compliant',
       links: [
         {
+          href: '/',
+          rel: 'self',
+          type: 'application/json',
+          title: 'This document',
+        },
+        {
           href: '/conformance',
           rel: 'conformance',
           type: 'application/json',

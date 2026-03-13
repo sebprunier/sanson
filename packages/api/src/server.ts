@@ -1,5 +1,5 @@
-import { buildApp } from './app.js'
-import { createPool } from './db.js'
+import { Pool } from 'pg'
+import { buildApp } from './app'
 
 const connectionString = process.env.DATABASE_URL
 if (!connectionString) {
@@ -7,12 +7,12 @@ if (!connectionString) {
   process.exit(1)
 }
 
-const db = createPool(connectionString)
-const app = buildApp(db)
+const port = parseInt(process.env.PORT ?? '3000', 10)
+const db = new Pool({ connectionString })
+const app = buildApp(db, { logger: true })
 
 try {
-  await app.listen({ port: 3000, host: '0.0.0.0' })
-  console.log('Sanson listening on http://0.0.0.0:3000')
+  await app.listen({ port, host: '0.0.0.0' })
 } catch (err) {
   app.log.error(err)
   process.exit(1)
