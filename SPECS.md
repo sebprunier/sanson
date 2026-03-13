@@ -138,11 +138,11 @@ This separation ensures that OGC endpoints live exactly where the spec expects t
 ```mermaid
 flowchart TD
     Upload["Uploaded file (.shp, .geojson)"]
-    Ogr2ogr["ogr2ogr\nSource SRID detection, reprojection to target SRID\nCSV export with EWKT geometry (SRID=XXXX;)\nOptions: -lco GEOMETRY=AS_WKT -lco SEPARATOR=SEMICOLON"]
-    Transform["(optional) Field transformation\nFiltering, renaming"]
-    Copy["Bulk COPY to PostgreSQL\nDELIMITER ';' CSV HEADER\nFREEZE option for initial loads"]
-    Index["Create GIST spatial index\non the geometry column"]
-    Metadata["Update layer metadata\n(bbox, feature_count, temporal_extent)"]
+    Ogr2ogr["ogr2ogr<br/>Source SRID detection, reprojection to target SRID<br/>CSV export with EWKT geometry (SRID=XXXX;)<br/>Options: -lco GEOMETRY=AS_WKT -lco SEPARATOR=SEMICOLON"]
+    Transform["(optional) Field transformation<br/>Filtering, renaming"]
+    Copy["Bulk COPY to PostgreSQL<br/>DELIMITER ';' CSV HEADER<br/>FREEZE option for initial loads"]
+    Index["Create GIST spatial index<br/>on the geometry column"]
+    Metadata["Update layer metadata<br/>(bbox, feature_count, temporal_extent)"]
 
     Upload --> Ogr2ogr --> Transform --> Copy --> Index --> Metadata
 ```
