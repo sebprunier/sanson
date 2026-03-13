@@ -35,6 +35,11 @@ CREATE TABLE IF NOT EXISTS sanson_layers (
     UNIQUE(workspace_id, name)
 );
 
+-- Default workspace (always present, used when no specific workspace is needed)
+INSERT INTO sanson_workspaces (name, description)
+VALUES ('default', 'Default workspace')
+ON CONFLICT DO NOTHING;
+
 -- Import history
 CREATE TABLE IF NOT EXISTS sanson_import_history (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),

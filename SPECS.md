@@ -41,6 +41,8 @@ Founding principle: do one thing, do it well. Sanson is a geographic data publis
 Logical namespace that groups layers. Used to organize data by theme or project.
 Example: `transport`, `risques`, `administratif`.
 
+A `default` workspace is always present and created at initialization. The admin UI uses it when no specific workspace is selected, keeping the experience simple for users who don't need to organize data into multiple workspaces.
+
 ### Layer
 
 Central unit of Sanson. A layer represents a geographic dataset exposed via the API. In OGC API Features vocabulary, a layer corresponds to a **Collection**. It is associated with:

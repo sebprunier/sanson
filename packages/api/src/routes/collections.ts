@@ -38,6 +38,19 @@ interface LayerRow {
   temporal_extent: (string | null)[] | null
 }
 
+const collectionResponseSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string' },
+    title: { type: 'string' },
+    description: { type: 'string', nullable: true },
+    extent: { type: 'object', additionalProperties: true },
+    itemType: { type: 'string' },
+    crs: { type: 'array', items: { type: 'string' } },
+    links: { type: 'array' },
+  },
+} as const
+
 const collectionsResponseSchema = {
   type: 'object',
   properties: {
@@ -140,4 +153,55 @@ export async function collectionsRoutes(
       }
     },
   })
+
+  app.get<{ Params: { collectionId: string }; Reply: OgcCollection }>(
+    '/collections/:collectionId',
+    {
+      schema: {
+        tags: ['OGC'],
+        summary: 'Collection metadata',
+        description: 'Returns metadata for a single feature collection',
+        params: {
+          type: 'object',
+          properties: {
+            collectionId: {
+              type: 'string',
+              description: 'Collection identifier (workspaceId:layerName)',
+            },
+          },
+          required: ['collectionId'],
+        },
+        response: {
+          200: collectionResponseSchema,
+        },
+      },
+      handler: async (request, reply) => {
+        const { collectionId } = request.params
+        const separatorIndex = collectionId.indexOf(':')
+
+        if (separatorIndex === -1) {
+          reply.status(404)
+          return { statusCode: 404, error: 'Not Found', message: 'Collection not found' }
+        }
+
+        const workspaceName = collectionId.slice(0, separatorIndex)
+        const layerName = collectionId.slice(separatorIndex + 1)
+
+        const { rows } = await options.db.query<LayerRow>(
+          `SELECT w.name AS workspace_name, l.name, l.description, l.bbox, l.temporal_extent
+           FROM sanson_layers l
+           JOIN sanson_workspaces w ON w.id = l.workspace_id
+           WHERE w.name = $1 AND l.name = $2`,
+          [workspaceName, layerName],
+        )
+
+        if (rows.length === 0) {
+          reply.status(404)
+          return { statusCode: 404, error: 'Not Found', message: 'Collection not found' }
+        }
+
+        return buildCollection(rows[0])
+      },
+    },
+  )
 }
