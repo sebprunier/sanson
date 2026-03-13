@@ -217,13 +217,40 @@ function MapView({ collectionId, bbox }: { collectionId: string; bbox: string | 
 function TableView({ collectionId }: { collectionId: string }) {
   const [items, setItems] = useState<ItemsResponse | null>(null)
   const [offset, setOffset] = useState(0)
+  const [filter, setFilter] = useState('')
+  const [appliedFilter, setAppliedFilter] = useState('')
+  const [filterError, setFilterError] = useState('')
   const limit = 20
 
   useEffect(() => {
-    fetch(`/collections/${collectionId}/items?limit=${limit}&offset=${offset}`)
-      .then((r) => r.json())
-      .then(setItems)
-  }, [collectionId, offset])
+    setFilterError('')
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+    if (appliedFilter) params.set('filter', appliedFilter)
+    fetch(`/collections/${collectionId}/items?${params}`)
+      .then(async (r) => {
+        if (!r.ok) {
+          const body = await r.json().catch(() => null)
+          setFilterError(body?.message ?? `HTTP ${r.status}`)
+          return
+        }
+        return r.json()
+      })
+      .then((data) => {
+        if (data) setItems(data)
+      })
+  }, [collectionId, offset, appliedFilter])
+
+  const handleFilterSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    setOffset(0)
+    setAppliedFilter(filter)
+  }
+
+  const handleClearFilter = () => {
+    setFilter('')
+    setAppliedFilter('')
+    setOffset(0)
+  }
 
   if (!items) return <div className="animate-pulse h-48 bg-gray-200 rounded-lg" />
 
@@ -231,8 +258,38 @@ function TableView({ collectionId }: { collectionId: string }) {
 
   return (
     <div>
+      <form onSubmit={handleFilterSubmit} className="flex gap-2 mb-3">
+        <input
+          type="text"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          placeholder="CQL2 filter, e.g. departement='GIRONDE'"
+          className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+        />
+        <button
+          type="submit"
+          className="bg-primary-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-primary-800"
+        >
+          Filter
+        </button>
+        {appliedFilter && (
+          <button
+            type="button"
+            onClick={handleClearFilter}
+            className="px-3 py-1.5 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
+          >
+            Clear
+          </button>
+        )}
+      </form>
+      {filterError && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-2 text-sm text-red-700 mb-3">
+          {filterError}
+        </div>
+      )}
       <p className="text-sm text-gray-500 mb-3">
         Showing {items.numberReturned} of {items.numberMatched} features
+        {appliedFilter && <span className="ml-1 text-primary-600">— filtered</span>}
       </p>
       <div className="bg-white rounded-lg border border-gray-200 overflow-auto max-h-[500px]">
         <table className="w-full text-sm">

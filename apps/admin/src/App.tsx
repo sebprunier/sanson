@@ -5,6 +5,7 @@ import { Workspaces } from './pages/Workspaces'
 import { Layers } from './pages/Layers'
 import { LayerDetail } from './pages/LayerDetail'
 import { Import } from './pages/Import'
+import { ApiExplorer } from './pages/ApiExplorer'
 
 export default function App() {
   return (
@@ -16,6 +17,7 @@ export default function App() {
           <Route path="layers" element={<Layers />} />
           <Route path="layers/:id" element={<LayerDetail />} />
           <Route path="import" element={<Import />} />
+          <Route path="api-explorer" element={<ApiExplorer />} />
         </Route>
       </Routes>
     </BrowserRouter>

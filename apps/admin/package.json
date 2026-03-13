@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@maplibre/maplibre-gl-style-spec": "^24.7.0",
+    "@scalar/api-reference-react": "^0.9.8",
     "maplibre-gl": "^5.20.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
