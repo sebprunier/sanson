@@ -86,6 +86,8 @@ export async function adminImportRoutes(
         }
       }
 
+      const startTime = Date.now()
+
       // Verify workspace exists
       const { rows: wsRows } = await options.db.query(
         'SELECT id FROM sanson_workspaces WHERE id = $1',
@@ -191,6 +193,14 @@ export async function adminImportRoutes(
         )
         layerId = newLayer[0].id
       }
+
+      // Record import in history
+      const durationMs = Date.now() - startTime
+      await options.db.query(
+        `INSERT INTO sanson_import_history (layer_id, source_file, source_srid, target_srid, feature_count, status, duration_ms)
+         VALUES ($1, $2, $3, $4, $5, 'completed', $6)`,
+        [layerId, layerName, srid, srid, insertedCount, durationMs],
+      )
 
       reply.status(201)
       return {

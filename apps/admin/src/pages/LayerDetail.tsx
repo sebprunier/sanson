@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { api } from '../services/api'
-import type { Layer } from '../services/api'
+import type { Layer, ColumnSchema, ImportHistory } from '../services/api'
 
 interface GeoJsonFeature {
   id: number
@@ -19,7 +19,7 @@ interface ItemsResponse {
   features: GeoJsonFeature[]
 }
 
-type Tab = 'map' | 'table'
+type Tab = 'map' | 'table' | 'schema' | 'history'
 
 export function LayerDetail() {
   const { id } = useParams<{ id: string }>()
@@ -67,13 +67,18 @@ export function LayerDetail() {
         <TabButton active={tab === 'table'} onClick={() => setTab('table')}>
           Table
         </TabButton>
+        <TabButton active={tab === 'schema'} onClick={() => setTab('schema')}>
+          Schema
+        </TabButton>
+        <TabButton active={tab === 'history'} onClick={() => setTab('history')}>
+          History
+        </TabButton>
       </div>
 
-      {tab === 'map' ? (
-        <MapView collectionId={collectionId} bbox={layer.bbox} />
-      ) : (
-        <TableView collectionId={collectionId} />
-      )}
+      {tab === 'map' && <MapView collectionId={collectionId} bbox={layer.bbox} />}
+      {tab === 'table' && <TableView collectionId={collectionId} />}
+      {tab === 'schema' && <SchemaView layerId={layer.id} />}
+      {tab === 'history' && <HistoryView layerId={layer.id} />}
     </div>
   )
 }
@@ -341,6 +346,143 @@ function TableView({ collectionId }: { collectionId: string }) {
         >
           Next
         </button>
+      </div>
+    </div>
+  )
+}
+
+function SchemaView({ layerId }: { layerId: string }) {
+  const [columns, setColumns] = useState<ColumnSchema[]>([])
+  const [totalCount, setTotalCount] = useState(0)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    api.layers
+      .schema(layerId)
+      .then((data) => {
+        setColumns(data.columns)
+        setTotalCount(data.total_count)
+      })
+      .finally(() => setLoading(false))
+  }, [layerId])
+
+  if (loading) return <div className="animate-pulse h-48 bg-gray-200 rounded-lg" />
+
+  return (
+    <div>
+      <p className="text-sm text-gray-500 mb-3">
+        {columns.length} columns &middot; {totalCount.toLocaleString()} rows
+      </p>
+      <div className="bg-white rounded-lg border border-gray-200 overflow-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50">
+            <tr className="border-b border-gray-200">
+              <th className="text-left px-3 py-2 font-medium text-gray-600">Column</th>
+              <th className="text-left px-3 py-2 font-medium text-gray-600">Type</th>
+              <th className="text-left px-3 py-2 font-medium text-gray-600">Nullable</th>
+              <th className="text-left px-3 py-2 font-medium text-gray-600">Non-null</th>
+              <th className="text-left px-3 py-2 font-medium text-gray-600">Nulls</th>
+              <th className="text-left px-3 py-2 font-medium text-gray-600">Distinct</th>
+              <th className="text-left px-3 py-2 font-medium text-gray-600">Min</th>
+              <th className="text-left px-3 py-2 font-medium text-gray-600">Max</th>
+            </tr>
+          </thead>
+          <tbody>
+            {columns.map((col) => (
+              <tr key={col.column} className="border-b border-gray-100 last:border-0">
+                <td className="px-3 py-2 font-mono text-gray-900">{col.column}</td>
+                <td className="px-3 py-2 text-gray-600">
+                  {col.geometry_type ? `${col.type} (${col.geometry_type}, ${col.srid})` : col.type}
+                </td>
+                <td className="px-3 py-2 text-gray-500">{col.nullable ? 'yes' : 'no'}</td>
+                <td className="px-3 py-2 text-gray-700">
+                  {col.non_null != null ? col.non_null.toLocaleString() : '—'}
+                </td>
+                <td className="px-3 py-2 text-gray-700">
+                  {col.null_count != null ? col.null_count.toLocaleString() : '—'}
+                </td>
+                <td className="px-3 py-2 text-gray-700">
+                  {col.distinct != null ? col.distinct.toLocaleString() : '—'}
+                </td>
+                <td className="px-3 py-2 text-gray-500 max-w-xs truncate">{col.min ?? '—'}</td>
+                <td className="px-3 py-2 text-gray-500 max-w-xs truncate">{col.max ?? '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+function HistoryView({ layerId }: { layerId: string }) {
+  const [history, setHistory] = useState<ImportHistory[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    api.layers
+      .history(layerId)
+      .then(setHistory)
+      .finally(() => setLoading(false))
+  }, [layerId])
+
+  if (loading) return <div className="animate-pulse h-48 bg-gray-200 rounded-lg" />
+
+  if (history.length === 0) {
+    return <p className="text-sm text-gray-500">No import history for this layer.</p>
+  }
+
+  return (
+    <div>
+      <p className="text-sm text-gray-500 mb-3">{history.length} import(s)</p>
+      <div className="bg-white rounded-lg border border-gray-200 overflow-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50">
+            <tr className="border-b border-gray-200">
+              <th className="text-left px-3 py-2 font-medium text-gray-600">Date</th>
+              <th className="text-left px-3 py-2 font-medium text-gray-600">Source</th>
+              <th className="text-left px-3 py-2 font-medium text-gray-600">Features</th>
+              <th className="text-left px-3 py-2 font-medium text-gray-600">SRID</th>
+              <th className="text-left px-3 py-2 font-medium text-gray-600">Duration</th>
+              <th className="text-left px-3 py-2 font-medium text-gray-600">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {history.map((h) => (
+              <tr key={h.id} className="border-b border-gray-100 last:border-0">
+                <td className="px-3 py-2 text-gray-700 whitespace-nowrap">
+                  {new Date(h.created_at).toLocaleString()}
+                </td>
+                <td className="px-3 py-2 text-gray-700">{h.source_file}</td>
+                <td className="px-3 py-2 text-gray-700">
+                  {h.feature_count?.toLocaleString() ?? '—'}
+                </td>
+                <td className="px-3 py-2 text-gray-500">
+                  {h.source_srid === h.target_srid
+                    ? h.target_srid
+                    : `${h.source_srid} → ${h.target_srid}`}
+                </td>
+                <td className="px-3 py-2 text-gray-500">
+                  {h.duration_ms != null ? `${(h.duration_ms / 1000).toFixed(1)}s` : '—'}
+                </td>
+                <td className="px-3 py-2">
+                  <span
+                    className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
+                      h.status === 'completed'
+                        ? 'bg-green-100 text-green-700'
+                        : h.status === 'failed'
+                          ? 'bg-red-100 text-red-700'
+                          : 'bg-yellow-100 text-yellow-700'
+                    }`}
+                  >
+                    {h.status}
+                  </span>
+                  {h.error && <p className="text-xs text-red-600 mt-1">{h.error}</p>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   )

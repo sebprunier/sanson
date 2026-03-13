@@ -28,6 +28,36 @@ export interface HealthStatus {
   db: string
 }
 
+export interface ColumnSchema {
+  column: string
+  type: string
+  nullable: boolean
+  geometry_type?: string
+  srid?: number
+  non_null?: number
+  null_count?: number
+  distinct?: number
+  min?: string | null
+  max?: string | null
+}
+
+export interface LayerSchema {
+  total_count: number
+  columns: ColumnSchema[]
+}
+
+export interface ImportHistory {
+  id: string
+  source_file: string
+  source_srid: number
+  target_srid: number
+  feature_count: number
+  status: string
+  error: string | null
+  duration_ms: number | null
+  created_at: string
+}
+
 export interface ImportResult {
   layer_id: string
   collection_id: string
@@ -77,6 +107,8 @@ export const api = {
       return request<Layer[]>(`/api/admin/layers${qs}`)
     },
     get: (id: string) => request<Layer>(`/api/admin/layers/${id}`),
+    schema: (id: string) => request<LayerSchema>(`/api/admin/layers/${id}/schema`),
+    history: (id: string) => request<ImportHistory[]>(`/api/admin/layers/${id}/history`),
     delete: (id: string) => request<void>(`/api/admin/layers/${id}`, { method: 'DELETE' }),
   },
 

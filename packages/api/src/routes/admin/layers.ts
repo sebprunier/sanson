@@ -254,6 +254,121 @@ export async function adminLayersRoutes(
     },
   })
 
+  // GET /api/admin/layers/:id/schema
+  app.get<{ Params: { id: string } }>('/api/admin/layers/:id/schema', {
+    schema: {
+      tags: ['Admin'],
+      summary: 'Layer schema with column statistics',
+      params: {
+        type: 'object',
+        properties: { id: { type: 'string' } },
+        required: ['id'],
+      },
+    },
+    handler: async (request, reply) => {
+      const { rows: layerRows } = await options.db.query<LayerRow>(
+        `${LAYER_SELECT} WHERE l.id = $1`,
+        [request.params.id],
+      )
+      if (layerRows.length === 0) {
+        reply.status(404)
+        return { statusCode: 404, error: 'Not Found', message: 'Layer not found' }
+      }
+      const layer = layerRows[0]
+
+      // Get columns from information_schema
+      const { rows: columns } = await options.db.query<{
+        column_name: string
+        data_type: string
+        is_nullable: string
+      }>(
+        `SELECT column_name, data_type, is_nullable
+         FROM information_schema.columns
+         WHERE table_name = $1
+         ORDER BY ordinal_position`,
+        [layer.table_name],
+      )
+
+      // Build stats query for each non-geometry column
+      const statColumns = columns.filter((c) => c.column_name !== layer.geometry_column)
+      const statExpressions = statColumns.map((c) => {
+        const col = `"${c.column_name}"`
+        return `
+          COUNT(${col}) AS "${c.column_name}__non_null",
+          COUNT(DISTINCT ${col}) AS "${c.column_name}__distinct",
+          MIN(${col}::text) AS "${c.column_name}__min",
+          MAX(${col}::text) AS "${c.column_name}__max"`
+      })
+
+      let statsRow: Record<string, unknown> = {}
+      if (statExpressions.length > 0) {
+        const totalCountExpr = `COUNT(*) AS total_count`
+        const { rows } = await options.db.query(
+          `SELECT ${totalCountExpr}, ${statExpressions.join(',')} FROM ${layer.table_name}`,
+        )
+        statsRow = rows[0] ?? {}
+      }
+
+      const totalCount = Number(statsRow.total_count ?? 0)
+
+      const result = columns.map((c) => {
+        const isGeom = c.column_name === layer.geometry_column
+        const base = {
+          column: c.column_name,
+          type: c.data_type,
+          nullable: c.is_nullable === 'YES',
+        }
+        if (isGeom) {
+          return { ...base, geometry_type: layer.geometry_type, srid: layer.srid }
+        }
+        const nonNull = Number(statsRow[`${c.column_name}__non_null`] ?? 0)
+        return {
+          ...base,
+          non_null: nonNull,
+          null_count: totalCount - nonNull,
+          distinct: Number(statsRow[`${c.column_name}__distinct`] ?? 0),
+          min: statsRow[`${c.column_name}__min`] ?? null,
+          max: statsRow[`${c.column_name}__max`] ?? null,
+        }
+      })
+
+      return { total_count: totalCount, columns: result }
+    },
+  })
+
+  // GET /api/admin/layers/:id/history
+  app.get<{ Params: { id: string } }>('/api/admin/layers/:id/history', {
+    schema: {
+      tags: ['Admin'],
+      summary: 'Import history for a layer',
+      params: {
+        type: 'object',
+        properties: { id: { type: 'string' } },
+        required: ['id'],
+      },
+    },
+    handler: async (request, reply) => {
+      // Verify layer exists
+      const { rows: layerRows } = await options.db.query(
+        'SELECT id FROM sanson_layers WHERE id = $1',
+        [request.params.id],
+      )
+      if (layerRows.length === 0) {
+        reply.status(404)
+        return { statusCode: 404, error: 'Not Found', message: 'Layer not found' }
+      }
+
+      const { rows } = await options.db.query(
+        `SELECT id, source_file, source_srid, target_srid, feature_count, status, error, duration_ms, created_at
+         FROM sanson_import_history
+         WHERE layer_id = $1
+         ORDER BY created_at DESC`,
+        [request.params.id],
+      )
+      return rows
+    },
+  })
+
   // DELETE /api/admin/layers/:id
   app.delete<{ Params: { id: string } }>('/api/admin/layers/:id', {
     schema: {
