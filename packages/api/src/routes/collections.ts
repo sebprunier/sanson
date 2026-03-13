@@ -45,6 +45,7 @@ interface LayerConfig {
   table_name: string
   geometry_column: string
   id_column: string
+  datetime_column: string | null
   srid: number
 }
 
@@ -154,7 +155,7 @@ async function resolveLayer(
   layerName: string,
 ): Promise<LayerConfig | null> {
   const { rows } = await db.query<LayerConfig>(
-    `SELECT w.name AS workspace_name, l.name, l.table_name, l.geometry_column, l.id_column, l.srid
+    `SELECT w.name AS workspace_name, l.name, l.table_name, l.geometry_column, l.id_column, l.datetime_column, l.srid
      FROM sanson_layers l
      JOIN sanson_workspaces w ON w.id = l.workspace_id
      WHERE w.name = $1 AND l.name = $2`,
@@ -240,6 +241,7 @@ export async function collectionsRoutes(
       limit?: string
       offset?: string
       bbox?: string
+      datetime?: string
       filter?: string
       'filter-lang'?: string
     }
@@ -267,6 +269,11 @@ export async function collectionsRoutes(
           },
           offset: { type: 'string', description: 'Start index (default 0)' },
           bbox: { type: 'string', description: 'Bounding box filter: minLon,minLat,maxLon,maxLat' },
+          datetime: {
+            type: 'string',
+            description:
+              'Temporal filter: instant (2024-01-01) or interval (2024-01-01/2024-12-31)',
+          },
           filter: { type: 'string', description: 'CQL2 Text filter expression' },
           'filter-lang': { type: 'string', description: 'Filter language (default: cql2-text)' },
         },
@@ -300,6 +307,39 @@ export async function collectionsRoutes(
           )
           params.push(...bbox)
           paramIndex += 4
+        }
+      }
+
+      // Datetime filter (OGC Core)
+      if (request.query.datetime) {
+        if (!layer.datetime_column) {
+          reply.status(400)
+          return {
+            statusCode: 400,
+            error: 'Bad Request',
+            message: 'This collection does not have a configured datetime column',
+          }
+        }
+        const dt = request.query.datetime
+        const dtCol = layer.datetime_column
+        if (dt.includes('/')) {
+          // Interval: start/end (either can be '..' for open-ended)
+          const [start, end] = dt.split('/')
+          if (start && start !== '..') {
+            conditions.push(`${dtCol} >= $${paramIndex}`)
+            params.push(start)
+            paramIndex++
+          }
+          if (end && end !== '..') {
+            conditions.push(`${dtCol} <= $${paramIndex}`)
+            params.push(end)
+            paramIndex++
+          }
+        } else {
+          // Instant: match the day
+          conditions.push(`${dtCol}::date = $${paramIndex}::date`)
+          params.push(dt)
+          paramIndex++
         }
       }
 
@@ -380,30 +420,36 @@ export async function collectionsRoutes(
           properties: r.properties,
         }))
 
+      // Build pagination links preserving query params
       const basePath = `/collections/${collectionId}/items`
-      const links: OgcLink[] = [
-        {
-          href: `${basePath}?offset=${offset}&limit=${limit}`,
-          rel: 'self',
-          type: 'application/geo+json',
-        },
-      ]
+      const extraParams = new URLSearchParams()
+      if (request.query.bbox) extraParams.set('bbox', request.query.bbox)
+      if (request.query.datetime) extraParams.set('datetime', request.query.datetime)
+      if (request.query.filter) extraParams.set('filter', request.query.filter)
+      if (request.query['filter-lang']) extraParams.set('filter-lang', request.query['filter-lang'])
+
+      function buildLink(rel: string, linkOffset: number): OgcLink {
+        const p = new URLSearchParams(extraParams)
+        p.set('offset', String(linkOffset))
+        p.set('limit', String(limit))
+        return { href: `${basePath}?${p}`, rel, type: 'application/geo+json' }
+      }
+
+      const links: OgcLink[] = [buildLink('self', offset)]
 
       if (offset + limit < numberMatched) {
-        links.push({
-          href: `${basePath}?offset=${offset + limit}&limit=${limit}`,
-          rel: 'next',
-          type: 'application/geo+json',
-        })
+        links.push(buildLink('next', offset + limit))
       }
 
       if (offset > 0) {
-        const prevOffset = Math.max(offset - limit, 0)
-        links.push({
-          href: `${basePath}?offset=${prevOffset}&limit=${limit}`,
-          rel: 'prev',
-          type: 'application/geo+json',
-        })
+        links.push(buildLink('prev', Math.max(offset - limit, 0)))
+      }
+
+      // first and last
+      links.push(buildLink('first', 0))
+      if (numberMatched > 0) {
+        const lastOffset = Math.max(Math.floor((numberMatched - 1) / limit) * limit, 0)
+        links.push(buildLink('last', lastOffset))
       }
 
       // HTTP headers

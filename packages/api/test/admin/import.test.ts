@@ -96,6 +96,23 @@ describe('POST /api/admin/import', () => {
     await app.close()
   })
 
+  it('records import in history table', async () => {
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+
+    const { rows } = await db.query(
+      `SELECT source_file, feature_count, status, duration_ms
+       FROM sanson_import_history
+       WHERE source_file = 'centrales'
+       ORDER BY created_at DESC LIMIT 1`,
+    )
+    await db.end()
+
+    expect(rows).toHaveLength(1)
+    expect(rows[0].feature_count).toBe('56')
+    expect(rows[0].status).toBe('completed')
+    expect(rows[0].duration_ms).toBeGreaterThan(0)
+  })
+
   it('returns 400 for missing fields', async () => {
     const db = new Pool({ connectionString: container.getConnectionUri() })
     const app = buildApp(db)
