@@ -368,6 +368,81 @@ describe('GET /collections/:collectionId/items', () => {
     }
   })
 
+  it('filters by lat/lon (point intersection)', async () => {
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+    const app = buildApp(db)
+    // Point very close to Paris
+    const response = await app.inject({
+      method: 'GET',
+      url: '/collections/test:sites/items?lat=48.86&lon=2.35&radius=1000',
+    })
+    await app.close()
+
+    const body = response.json()
+    expect(body.numberMatched).toBe(1)
+    expect(body.features[0].properties.name).toBe('Paris')
+  })
+
+  it('filters by lat/lon/radius — larger radius includes multiple cities', async () => {
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+    const app = buildApp(db)
+    // ~500km radius from a central point should include Paris and Lyon
+    const response = await app.inject({
+      method: 'GET',
+      url: '/collections/test:sites/items?lat=47.0&lon=3.5&radius=500000',
+    })
+    await app.close()
+
+    const body = response.json()
+    expect(body.numberMatched).toBeGreaterThanOrEqual(2)
+    const names = body.features.map((f: { properties: { name: string } }) => f.properties.name)
+    expect(names).toContain('Paris')
+    expect(names).toContain('Lyon')
+  })
+
+  it('returns 400 for invalid lat/lon', async () => {
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+    const app = buildApp(db)
+    const response = await app.inject({
+      method: 'GET',
+      url: '/collections/test:sites/items?lat=999&lon=2.35',
+    })
+    await app.close()
+
+    expect(response.statusCode).toBe(400)
+    expect(response.json().message).toContain('lat')
+  })
+
+  it('returns 400 when radius is given without lat/lon', async () => {
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+    const app = buildApp(db)
+    const response = await app.inject({
+      method: 'GET',
+      url: '/collections/test:sites/items?radius=5000',
+    })
+    await app.close()
+
+    expect(response.statusCode).toBe(400)
+    expect(response.json().message).toContain('lat and lon')
+  })
+
+  it('preserves lat/lon/radius in pagination links', async () => {
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+    const app = buildApp(db)
+    const response = await app.inject({
+      method: 'GET',
+      url: '/collections/test:sites/items?lat=47.0&lon=3.5&radius=500000&limit=1',
+    })
+    await app.close()
+
+    const body = response.json()
+    for (const link of body.links) {
+      expect(link.href).toContain('lat=')
+      expect(link.href).toContain('lon=')
+      expect(link.href).toContain('radius=')
+    }
+  })
+
   it('returns 404 for unknown collection', async () => {
     const db = new Pool({ connectionString: container.getConnectionUri() })
     const app = buildApp(db)

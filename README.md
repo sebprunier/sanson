@@ -26,7 +26,7 @@ Sanson exposes geographic data stored in PostgreSQL/PostGIS via clean, modern RE
 
 - **OGC API — Features compliant** — compatible out of the box with QGIS, ArcGIS, FME, and any OGC-compliant client
 - **CQL2 filtering** — filter features by attributes and geometry using the OGC CQL2 Text standard (`=`, `<>`, `<`, `>`, `AND`, `OR`, `NOT`, `LIKE`, `IN`, `IS NULL`, `S_INTERSECTS`, `S_WITHIN`, `S_CONTAINS`)
-- **Bbox and datetime filtering** — spatial bounding box and temporal filters as per OGC Core
+- **Bbox, datetime, and proximity filtering** — spatial bounding box, temporal filters (OGC Core), and `lat`+`lon`+`radius` geographic shortcuts
 - **GeoJSON import** — synchronous import with automatic table creation, spatial indexing, and import history tracking
 - **Queryables** — discover filterable properties for each collection
 - **OGC pagination** — `self`, `next`, `prev`, `first`, `last` links in body and HTTP `Link` header + `X-Total-Count`
@@ -100,7 +100,7 @@ The API is available at `http://localhost:3000`, and the admin UI at `http://loc
 GET /                                        OGC landing page
 GET /conformance                             OGC conformance declaration
 GET /collections                             List all feature collections
-GET /collections/{id}/items                  Features with pagination, bbox, datetime filter
+GET /collections/{id}/items                  Features with pagination, bbox, datetime, lat/lon/radius
 GET /collections/{id}/items/{fid}            Single feature by ID
 GET /collections/{id}/queryables             Queryable properties (JSON Schema)
 GET /api                                     OpenAPI 3.0 specification

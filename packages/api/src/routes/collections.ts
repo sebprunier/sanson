@@ -242,6 +242,9 @@ export async function collectionsRoutes(
       offset?: string
       bbox?: string
       datetime?: string
+      lat?: string
+      lon?: string
+      radius?: string
       filter?: string
       'filter-lang'?: string
     }
@@ -273,6 +276,12 @@ export async function collectionsRoutes(
             type: 'string',
             description:
               'Temporal filter: instant (2024-01-01) or interval (2024-01-01/2024-12-31)',
+          },
+          lat: { type: 'string', description: 'Latitude for point/radius filter (-90 to 90)' },
+          lon: { type: 'string', description: 'Longitude for point/radius filter (-180 to 180)' },
+          radius: {
+            type: 'string',
+            description: 'Search radius in meters (requires lat and lon)',
           },
           filter: { type: 'string', description: 'CQL2 Text filter expression' },
           'filter-lang': { type: 'string', description: 'Filter language (default: cql2-text)' },
@@ -307,6 +316,49 @@ export async function collectionsRoutes(
           )
           params.push(...bbox)
           paramIndex += 4
+        }
+      }
+
+      // Lat/lon/radius filter (Sanson shortcut)
+      if (request.query.lat != null && request.query.lon != null) {
+        const lat = parseFloat(request.query.lat)
+        const lon = parseFloat(request.query.lon)
+        if (isNaN(lat) || lat < -90 || lat > 90 || isNaN(lon) || lon < -180 || lon > 180) {
+          reply.status(400)
+          return {
+            statusCode: 400,
+            error: 'Bad Request',
+            message: 'Invalid lat/lon: lat must be -90..90, lon must be -180..180',
+          }
+        }
+        if (request.query.radius != null) {
+          const radius = parseFloat(request.query.radius)
+          if (isNaN(radius) || radius <= 0) {
+            reply.status(400)
+            return {
+              statusCode: 400,
+              error: 'Bad Request',
+              message: 'Invalid radius: must be a positive number (meters)',
+            }
+          }
+          conditions.push(
+            `ST_Intersects(${layer.geometry_column}, ST_Transform(ST_Buffer(ST_SetSRID(ST_MakePoint($${paramIndex}, $${paramIndex + 1}), 4326)::geography, $${paramIndex + 2})::geometry, ${layer.srid}))`,
+          )
+          params.push(lon, lat, radius)
+          paramIndex += 3
+        } else {
+          conditions.push(
+            `ST_Intersects(${layer.geometry_column}, ST_Transform(ST_SetSRID(ST_MakePoint($${paramIndex}, $${paramIndex + 1}), 4326), ${layer.srid}))`,
+          )
+          params.push(lon, lat)
+          paramIndex += 2
+        }
+      } else if (request.query.radius != null) {
+        reply.status(400)
+        return {
+          statusCode: 400,
+          error: 'Bad Request',
+          message: 'radius requires both lat and lon parameters',
         }
       }
 
@@ -425,6 +477,9 @@ export async function collectionsRoutes(
       const extraParams = new URLSearchParams()
       if (request.query.bbox) extraParams.set('bbox', request.query.bbox)
       if (request.query.datetime) extraParams.set('datetime', request.query.datetime)
+      if (request.query.lat) extraParams.set('lat', request.query.lat)
+      if (request.query.lon) extraParams.set('lon', request.query.lon)
+      if (request.query.radius) extraParams.set('radius', request.query.radius)
       if (request.query.filter) extraParams.set('filter', request.query.filter)
       if (request.query['filter-lang']) extraParams.set('filter-lang', request.query['filter-lang'])
 
