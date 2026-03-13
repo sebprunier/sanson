@@ -176,4 +176,35 @@ describe('GET /collections/:collectionId/items — real data (nuclear plants)', 
     expect(feature.properties.departement).toBeDefined()
     expect(feature.properties.puissance_installee).toBeDefined()
   })
+
+  it('returns a single feature by ID', async () => {
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+    const app = buildApp(db)
+    const response = await app.inject({
+      method: 'GET',
+      url: '/collections/energie:centrales/items/1',
+    })
+    await app.close()
+
+    expect(response.statusCode).toBe(200)
+    const body = response.json()
+    expect(body.type).toBe('Feature')
+    expect(body.id).toBe(1)
+    expect(body.geometry.type).toBe('Point')
+    expect(body.properties.centrale).toBeDefined()
+    expect(body.links.find((l: { rel: string }) => l.rel === 'self')).toBeDefined()
+    expect(body.links.find((l: { rel: string }) => l.rel === 'collection')).toBeDefined()
+  })
+
+  it('returns 404 for unknown feature ID', async () => {
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+    const app = buildApp(db)
+    const response = await app.inject({
+      method: 'GET',
+      url: '/collections/energie:centrales/items/9999',
+    })
+    await app.close()
+
+    expect(response.statusCode).toBe(404)
+  })
 })

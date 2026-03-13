@@ -374,4 +374,79 @@ export async function collectionsRoutes(
       }
     },
   })
+
+  // GET /collections/:collectionId/items/:fid
+  app.get<{
+    Params: { collectionId: string; fid: string }
+  }>('/collections/:collectionId/items/:fid', {
+    schema: {
+      tags: ['OGC'],
+      summary: 'Feature by identifier',
+      description: 'Returns a single feature from a collection',
+      params: {
+        type: 'object',
+        properties: {
+          collectionId: {
+            type: 'string',
+            description: 'Collection identifier (workspaceId:layerName)',
+          },
+          fid: { type: 'string', description: 'Feature identifier' },
+        },
+        required: ['collectionId', 'fid'],
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            type: { type: 'string' },
+            id: {},
+            geometry: { type: 'object', additionalProperties: true },
+            properties: { type: 'object', additionalProperties: true },
+            links: { type: 'array' },
+          },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const parsed = parseCollectionId(request.params.collectionId)
+      if (!parsed) return sendNotFound(reply)
+
+      const layer = await resolveLayer(options.db, parsed.workspaceName, parsed.layerName)
+      if (!layer) return sendNotFound(reply)
+
+      const collectionId = `${layer.workspace_name}:${layer.name}`
+      const geomExpr =
+        layer.srid === 4326 ? layer.geometry_column : `ST_Transform(${layer.geometry_column}, 4326)`
+
+      const { rows } = await options.db.query<FeatureRow>(
+        `SELECT ${layer.id_column} AS id,
+                ST_AsGeoJSON(${geomExpr})::json AS geojson,
+                to_jsonb(t.*) - '${layer.id_column}' - '${layer.geometry_column}' AS properties
+         FROM ${layer.table_name} t
+         WHERE ${layer.id_column} = $1`,
+        [request.params.fid],
+      )
+
+      if (rows.length === 0) {
+        reply.status(404)
+        return { statusCode: 404, error: 'Not Found', message: 'Feature not found' }
+      }
+
+      const row = rows[0]
+      return {
+        type: 'Feature',
+        id: row.id,
+        geometry: row.geojson,
+        properties: row.properties,
+        links: [
+          {
+            href: `/collections/${collectionId}/items/${row.id}`,
+            rel: 'self',
+            type: 'application/geo+json',
+          },
+          { href: `/collections/${collectionId}`, rel: 'collection', type: 'application/json' },
+        ],
+      }
+    },
+  })
 }
