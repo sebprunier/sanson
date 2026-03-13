@@ -18,7 +18,25 @@ const conformsTo = [
 ]
 
 export async function conformanceRoutes(app: FastifyInstance): Promise<void> {
-  app.get<{ Reply: ConformanceDeclaration }>('/conformance', async () => {
-    return { conformsTo }
+  app.get<{ Reply: ConformanceDeclaration }>('/conformance', {
+    schema: {
+      tags: ['OGC'],
+      summary: 'Conformance declaration',
+      description: 'Lists the OGC API conformance classes implemented by this server',
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            conformsTo: {
+              type: 'array',
+              items: { type: 'string', format: 'uri' },
+            },
+          },
+        },
+      },
+    },
+    handler: async () => {
+      return { conformsTo }
+    },
   })
 }
