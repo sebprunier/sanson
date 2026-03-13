@@ -56,11 +56,14 @@ nvm use
 # Install dependencies
 pnpm install
 
+# Create your .env from the example
+cp .env.example .env
+
 # Start the database
 docker compose -f docker/compose.yml up -d
 
 # Start the API in dev mode
-DATABASE_URL=postgresql://sanson:sanson@localhost:5433/sanson pnpm --filter @sanson/api dev
+pnpm dev
 ```
 
 The API is available at `http://localhost:3000`.
@@ -116,8 +119,8 @@ pnpm --filter @sanson/api test
 # Watch mode
 pnpm --filter @sanson/api test:watch
 
-# Dev server (hot reload)
-DATABASE_URL=postgresql://sanson:sanson@localhost:5433/sanson pnpm --filter @sanson/api dev
+# Dev server (hot reload, reads .env automatically)
+pnpm dev
 
 # Lint
 pnpm lint

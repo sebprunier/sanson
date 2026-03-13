@@ -8,6 +8,7 @@
   },
   "scripts": {
     "prepare": "husky",
+    "dev": "pnpm --filter @sanson/api dev",
     "lint": "eslint .",
     "format": "prettier --write .",
     "test": "pnpm -r test"
