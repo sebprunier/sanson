@@ -60,7 +60,7 @@ pnpm install
 docker compose -f docker/compose.yml up -d
 
 # Start the API in dev mode
-DATABASE_URL=postgresql://sanson:sanson@localhost:5432/sanson pnpm --filter @sanson/api dev
+DATABASE_URL=postgresql://sanson:sanson@localhost:5433/sanson pnpm --filter @sanson/api dev
 ```
 
 The API is available at `http://localhost:3000`.
@@ -69,9 +69,10 @@ The API is available at `http://localhost:3000`.
 
 ```
 GET /              OGC landing page
-GET /health        Database connectivity check
 GET /conformance   OGC conformance declaration
-GET /collections   List all workspaces and layers
+GET /collections   List all feature collections
+GET /api           OpenAPI 3.0 specification
+GET /health        Database connectivity check
 ```
 
 ---
@@ -116,7 +117,7 @@ pnpm --filter @sanson/api test
 pnpm --filter @sanson/api test:watch
 
 # Dev server (hot reload)
-DATABASE_URL=... pnpm --filter @sanson/api dev
+DATABASE_URL=postgresql://sanson:sanson@localhost:5433/sanson pnpm --filter @sanson/api dev
 
 # Lint
 pnpm lint
@@ -135,10 +136,8 @@ pnpm format
 
 ## Contributing
 
-Specs are in [`SPECS.md`](./SPECS.md). Read them before contributing.
-
----
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
 
 ## License
 
-MIT
+[MIT](./LICENSE)
