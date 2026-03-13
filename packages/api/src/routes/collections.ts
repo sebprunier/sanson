@@ -677,4 +677,88 @@ export async function collectionsRoutes(
       }
     },
   })
+
+  // GET /collections/:collectionId/tiles/:z/:x/:y.pbf
+  app.get<{
+    Params: { collectionId: string; z: string; x: string; y: string }
+  }>('/collections/:collectionId/tiles/:z/:x/:y.pbf', {
+    schema: {
+      tags: ['OGC'],
+      summary: 'Vector tile (MVT)',
+      description: 'Returns a Mapbox Vector Tile for the given tile coordinates',
+      params: {
+        type: 'object',
+        properties: {
+          collectionId: {
+            type: 'string',
+            description: 'Collection identifier (workspaceId:layerName)',
+          },
+          z: { type: 'string', description: 'Zoom level' },
+          x: { type: 'string', description: 'Tile column' },
+          y: { type: 'string', description: 'Tile row' },
+        },
+        required: ['collectionId', 'z', 'x', 'y'],
+      },
+    },
+    handler: async (request, reply) => {
+      const parsed = parseCollectionId(request.params.collectionId)
+      if (!parsed) return sendNotFound(reply)
+
+      const layer = await resolveLayer(options.db, parsed.workspaceName, parsed.layerName)
+      if (!layer) return sendNotFound(reply)
+
+      const z = parseInt(request.params.z, 10)
+      const x = parseInt(request.params.x, 10)
+      const y = parseInt(request.params.y, 10)
+
+      if (isNaN(z) || isNaN(x) || isNaN(y) || z < 0 || z > 30) {
+        reply.status(400)
+        return { statusCode: 400, error: 'Bad Request', message: 'Invalid tile coordinates' }
+      }
+
+      // Get non-geometry, non-id columns for the tile properties
+      const { rows: columns } = await options.db.query<{ column_name: string }>(
+        `SELECT column_name FROM information_schema.columns
+         WHERE table_name = $1 AND column_name NOT IN ($2, $3)
+         ORDER BY ordinal_position`,
+        [layer.table_name, layer.id_column, layer.geometry_column],
+      )
+
+      const propColumns = columns.map((c) => `"${c.column_name}"::text`).join(', ')
+      const propSelect = propColumns ? `, ${propColumns}` : ''
+
+      const sql = `
+        WITH mvtgeom AS (
+          SELECT ST_AsMVTGeom(
+            ST_Transform(${layer.geometry_column}, 3857),
+            ST_TileEnvelope($1, $2, $3),
+            extent => 4096,
+            buffer => 256
+          ) AS geom
+          ${propSelect}
+          FROM ${layer.table_name}
+          WHERE ${layer.geometry_column} && ST_Transform(
+            ST_TileEnvelope($1, $2, $3, margin => (256.0 / 4096)),
+            ${layer.srid}
+          )
+        )
+        SELECT ST_AsMVT(mvtgeom.*, $4) AS mvt FROM mvtgeom
+      `
+
+      const { rows } = await options.db.query<{ mvt: Buffer }>(sql, [z, x, y, layer.name])
+
+      const mvt = rows[0]?.mvt
+
+      reply.header('Content-Type', 'application/vnd.mapbox-vector-tile')
+      reply.header('Cache-Control', 'public, max-age=3600')
+
+      if (!mvt || mvt.length === 0) {
+        // Empty tile — return 204
+        reply.status(204)
+        return
+      }
+
+      return mvt
+    },
+  })
 }

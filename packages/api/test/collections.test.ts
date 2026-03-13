@@ -566,3 +566,97 @@ describe('GET /collections/:collectionId/items — datetime filter', () => {
     expect(response.json().message).toContain('datetime column')
   })
 })
+
+describe('GET /collections/:collectionId/tiles/:z/:x/:y.pbf', () => {
+  let container: StartedPostgreSqlContainer
+
+  beforeAll(async () => {
+    container = await new PostgreSqlContainer('postgis/postgis:16-3.4').start()
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+    await db.query(initSql)
+
+    await db.query(
+      `INSERT INTO sanson_workspaces (id, name)
+       VALUES ('00000000-0000-0000-0000-000000000040', 'test')`,
+    )
+
+    await db.query(`
+      CREATE TABLE test_tiles (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100),
+        geom GEOMETRY(Point, 4326)
+      )
+    `)
+    await db.query(`CREATE INDEX idx_test_tiles_geom ON test_tiles USING GIST (geom)`)
+    await db.query(`
+      INSERT INTO test_tiles (name, geom) VALUES
+        ('Paris',     ST_SetSRID(ST_MakePoint(2.35, 48.86), 4326)),
+        ('Lyon',      ST_SetSRID(ST_MakePoint(4.83, 45.76), 4326)),
+        ('Marseille', ST_SetSRID(ST_MakePoint(5.37, 43.30), 4326))
+    `)
+
+    await db.query(
+      `INSERT INTO sanson_layers (workspace_id, name, table_name, geometry_column, id_column, srid)
+       VALUES ('00000000-0000-0000-0000-000000000040', 'tiles', 'test_tiles', 'geom', 'id', 4326)`,
+    )
+
+    await db.end()
+  })
+
+  afterAll(async () => {
+    await container.stop()
+  })
+
+  it('returns a non-empty MVT tile covering France', async () => {
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+    const app = buildApp(db)
+    // z=5, x=16, y=11 covers France
+    const response = await app.inject({
+      method: 'GET',
+      url: '/collections/test:tiles/tiles/5/16/11.pbf',
+    })
+    await app.close()
+
+    expect(response.statusCode).toBe(200)
+    expect(response.headers['content-type']).toBe('application/vnd.mapbox-vector-tile')
+    expect(response.headers['cache-control']).toContain('max-age=3600')
+    expect(response.rawPayload.length).toBeGreaterThan(0)
+  })
+
+  it('returns 204 for an empty tile (no features in area)', async () => {
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+    const app = buildApp(db)
+    // z=5, x=0, y=0 covers north-west Atlantic — no features
+    const response = await app.inject({
+      method: 'GET',
+      url: '/collections/test:tiles/tiles/5/0/0.pbf',
+    })
+    await app.close()
+
+    expect(response.statusCode).toBe(204)
+  })
+
+  it('returns 404 for unknown collection', async () => {
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+    const app = buildApp(db)
+    const response = await app.inject({
+      method: 'GET',
+      url: '/collections/foo:bar/tiles/5/16/11.pbf',
+    })
+    await app.close()
+
+    expect(response.statusCode).toBe(404)
+  })
+
+  it('returns 400 for invalid tile coordinates', async () => {
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+    const app = buildApp(db)
+    const response = await app.inject({
+      method: 'GET',
+      url: '/collections/test:tiles/tiles/99/0/0.pbf',
+    })
+    await app.close()
+
+    expect(response.statusCode).toBe(400)
+  })
+})

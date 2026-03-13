@@ -33,11 +33,11 @@ Sanson exposes geographic data stored in PostgreSQL/PostGIS via clean, modern RE
 - **Web admin UI** — dashboard, workspace and layer management, data import, interactive map and table views with CQL2 filter
 - **API Explorer** — interactive API documentation powered by [Scalar](https://scalar.com), built into the admin UI
 - **Workspaces** — organize layers by theme or project
+- **Vector tiles (MVT)** — Mapbox Vector Tiles via `ST_AsMVT` at `/collections/{id}/tiles/{z}/{x}/{y}.pbf`
 - **OpenAPI documentation** — auto-generated from route schemas
 
 ### Planned
 
-- **Vector tiles** — Mapbox Vector Tiles (MVT) via `ST_AsMVT`
 - **Shapefile import** — via `ogr2ogr` with SRID detection and reprojection
 - **Async ingestion** — background workers with pg-boss for large datasets
 
@@ -103,6 +103,7 @@ GET /collections                             List all feature collections
 GET /collections/{id}/items                  Features with pagination, bbox, datetime, lat/lon/radius
 GET /collections/{id}/items/{fid}            Single feature by ID
 GET /collections/{id}/queryables             Queryable properties (JSON Schema)
+GET /collections/{id}/tiles/{z}/{x}/{y}.pbf  Mapbox Vector Tile (MVT)
 GET /api                                     OpenAPI 3.0 specification
 GET /health                                  Database connectivity check
 POST /api/admin/import                       Import a GeoJSON file

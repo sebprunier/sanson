@@ -22,7 +22,6 @@ Full specifications are in [`SPECS.md`](./SPECS.md). Read it before making signi
 
 - **Job queue**: pg-boss (PostgreSQL-based, no Redis or external queue)
 - **Geo ingestion**: `ogr2ogr` CLI + PostgreSQL `COPY` for Shapefile support and large volumes
-- **Vector tiles**: MVT via `ST_AsMVT`
 
 ## Monorepo layout
 
@@ -84,6 +83,7 @@ pnpm --filter @sanson/admin e2e:headed      # same, with visible browser
 - **OGC datetime filter** — `?datetime=` supports instant, interval, and open-ended bounds (`..`). Requires `datetime_column` to be configured on the layer.
 - **Lat/lon/radius shortcuts** — non-standard convenience params: `?lat=&lon=` for point intersection, `?lat=&lon=&radius=` for radius search (meters, via `::geography` cast). Combinable with all other filters.
 - **OGC pagination** — `first`/`last`/`next`/`prev` links in body + `Link` header + `X-Total-Count`. All query params (bbox, datetime, lat/lon/radius, filter) are preserved in pagination links.
+- **Vector tiles (MVT)** — `GET /collections/:id/tiles/:z/:x/:y.pbf`. Uses `ST_AsMVT` + `ST_AsMVTGeom` with extent=4096, buffer=256. Properties cast to text. Returns `application/vnd.mapbox-vector-tile` with 1h cache. Empty tiles return 204.
 - **WGS84 (EPSG:4326) by default** for API output
 - **Table prefix `sanson_`** for metadata tables (workspaces, layers, import history) — no dedicated schema for now, revisit later if needed
 - **Vite proxy** — admin UI dev server on port 5173 proxies `/api`, `/collections`, `/conformance`, `/health` to API on port 3000
