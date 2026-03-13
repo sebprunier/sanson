@@ -5,7 +5,7 @@ Thanks for your interest in contributing to Sanson!
 ## Getting started
 
 1. Fork and clone the repository
-2. Install prerequisites: Node.js 24 (`nvm use`), pnpm, Docker, GDAL
+2. Install prerequisites: Node.js 24 (`nvm use`), pnpm, Docker
 3. Run `pnpm install`
 4. Start the database: `docker compose -f docker/compose.yml up -d`
 5. Run the tests: `pnpm test`

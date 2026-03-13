@@ -446,4 +446,83 @@ export async function collectionsRoutes(
       }
     },
   })
+
+  // GET /collections/:collectionId/queryables
+  app.get<{ Params: { collectionId: string } }>('/collections/:collectionId/queryables', {
+    schema: {
+      tags: ['OGC'],
+      summary: 'Queryable properties',
+      description: 'Returns a JSON Schema describing the queryable properties of a collection',
+      params: {
+        type: 'object',
+        properties: {
+          collectionId: {
+            type: 'string',
+            description: 'Collection identifier (workspaceId:layerName)',
+          },
+        },
+        required: ['collectionId'],
+      },
+    },
+    handler: async (request, reply) => {
+      const parsed = parseCollectionId(request.params.collectionId)
+      if (!parsed) return sendNotFound(reply)
+
+      const layer = await resolveLayer(options.db, parsed.workspaceName, parsed.layerName)
+      if (!layer) return sendNotFound(reply)
+
+      const collectionId = `${layer.workspace_name}:${layer.name}`
+
+      // Query column info from information_schema
+      const { rows: columns } = await options.db.query<{
+        column_name: string
+        data_type: string
+      }>(
+        `SELECT column_name, data_type
+         FROM information_schema.columns
+         WHERE table_name = $1
+           AND column_name NOT IN ($2, $3)
+         ORDER BY ordinal_position`,
+        [layer.table_name, layer.id_column, layer.geometry_column],
+      )
+
+      const pgToJsonType: Record<string, { type: string }> = {
+        integer: { type: 'integer' },
+        bigint: { type: 'integer' },
+        smallint: { type: 'integer' },
+        'double precision': { type: 'number' },
+        real: { type: 'number' },
+        numeric: { type: 'number' },
+        boolean: { type: 'boolean' },
+        text: { type: 'string' },
+        'character varying': { type: 'string' },
+        character: { type: 'string' },
+        date: { type: 'string' },
+        'timestamp without time zone': { type: 'string' },
+        'timestamp with time zone': { type: 'string' },
+      }
+
+      const properties: Record<string, { type: string; title: string }> = {}
+      for (const col of columns) {
+        properties[col.column_name] = {
+          title: col.column_name,
+          ...(pgToJsonType[col.data_type] ?? { type: 'string' }),
+        }
+      }
+
+      reply.header('Content-Type', 'application/schema+json')
+      return {
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
+        $id: `/collections/${collectionId}/queryables`,
+        type: 'object',
+        title: collectionId,
+        properties: {
+          geometry: {
+            $ref: 'https://geojson.org/schema/Geometry.json',
+          },
+          ...properties,
+        },
+      }
+    },
+  })
 }

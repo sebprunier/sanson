@@ -13,30 +13,40 @@ Full specifications are in [`SPECS.md`](./SPECS.md). Read it before making signi
 - **Language**: TypeScript (strict mode, `moduleResolution: Bundler`)
 - **HTTP framework**: Fastify 5
 - **Database**: PostgreSQL 16 + PostGIS 3.4, accessed via `pg` (raw SQL — no ORM)
-- **Job queue**: pg-boss (PostgreSQL-based, no Redis or external queue)
-- **Geo ingestion**: `ogr2ogr` CLI + PostgreSQL `COPY` (proven pattern for large volumes)
+- **Admin UI**: React 19 + Vite 8 + Tailwind CSS 4 + MapLibre GL JS
 - **Tests**: vitest + Testcontainers (real PostGIS — no DB mocking)
 - **Linting**: ESLint + Prettier, enforced on commit via Husky + lint-staged
+- **CI**: GitHub Actions (lint, typecheck, tests)
+
+### Not yet implemented (planned)
+
+- **Job queue**: pg-boss (PostgreSQL-based, no Redis or external queue)
+- **Geo ingestion**: `ogr2ogr` CLI + PostgreSQL `COPY` for Shapefile support and large volumes
+- **CQL2 filtering**: CQL2 Text parser for attribute filtering
+- **Vector tiles**: MVT via `ST_AsMVT`
 
 ## Monorepo layout
 
 ```
-packages/core/    Shared types, DB utilities, CQL2 parser
-packages/api/     Fastify server (NODE_MODE=api)
-packages/worker/  Ingestion workers (NODE_MODE=worker)
-apps/admin/       React + MapLibre GL admin UI
+packages/api/     Fastify server — OGC API + admin routes
+apps/admin/       React + Tailwind CSS + MapLibre GL admin UI
 docker/           Docker Compose for local PostgreSQL + PostGIS
+scripts/          SQL init scripts
+data/             Test datasets (GeoJSON, Shapefile)
 ```
+
+Planned but not yet created: `packages/core/` (shared types, CQL2 parser), `packages/worker/` (ingestion workers).
 
 ## Running things
 
 ```bash
-nvm use                                   # Node 24
-pnpm install                              # install deps
-docker compose -f docker/compose.yml up -d  # start DB
-pnpm test                                 # run all tests
-pnpm --filter @sanson/api test            # run api tests only
-pnpm --filter @sanson/api dev             # dev server (needs DATABASE_URL)
+nvm use                                     # Node 24
+pnpm install                                # install deps
+docker compose -f docker/compose.yml up -d  # start DB (port 5433)
+pnpm dev                                    # API dev server (port 3000)
+pnpm --filter @sanson/admin dev             # admin UI dev server (port 5173)
+pnpm test                                   # run all tests
+pnpm --filter @sanson/api test              # run api tests only
 ```
 
 ## Coding conventions
@@ -58,12 +68,12 @@ pnpm --filter @sanson/api dev             # dev server (needs DATABASE_URL)
 
 ## Key architectural decisions
 
-- **Single binary, `NODE_MODE` env var** — `api`, `worker`, or `all` (default). Like Elasticsearch nodes.
-- **pg-boss for job queue** — uses PostgreSQL `SELECT ... FOR UPDATE SKIP LOCKED`. No Redis, no extra infra.
-- **`ogr2ogr` for ingestion** — handles Shapefile parsing, SRID detection, reprojection. Output is CSV with EWKT, loaded via PostgreSQL `COPY` for performance on large volumes.
-- **OGC API Features URLs** — collections are identified as `{workspaceId}:{layerName}` (e.g., `risques:icpe`)
-- **WGS84 (EPSG:4326) by default** for API output, **Web Mercator (EPSG:3857)** for MVT tiles
+- **OGC API Features URLs** — collections are identified as `{workspaceName}:{layerName}` (e.g., `default:centrales`)
+- **Default workspace** — always exists, created in `scripts/init.sql`
+- **Synchronous GeoJSON import** — direct parsing + insert via `ST_GeomFromGeoJSON`. Async worker with pg-boss planned for later.
+- **WGS84 (EPSG:4326) by default** for API output
 - **Table prefix `sanson_`** for metadata tables (workspaces, layers, import history) — no dedicated schema for now, revisit later if needed
+- **Vite proxy** — admin UI dev server on port 5173 proxies `/api`, `/collections`, `/conformance`, `/health` to API on port 3000
 
 ## Out of scope — do not add
 

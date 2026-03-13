@@ -25,11 +25,18 @@ Sanson exposes geographic data stored in PostgreSQL/PostGIS via clean, modern RE
 ## Features
 
 - **OGC API — Features compliant** — compatible out of the box with QGIS, ArcGIS, FME, and any OGC-compliant client
-- **Vector tiles** — Mapbox Vector Tiles (MVT) via `ST_AsMVT`
-- **CQL2 filtering** — filter features by attributes and geometry using the OGC CQL2 standard
-- **Data ingestion** — import GeoJSON and Shapefile data with automatic SRID detection and reprojection
-- **Web admin UI** — explore layers, visualize data on a map, manage imports
+- **GeoJSON import** — synchronous import with automatic table creation and spatial indexing
+- **Queryables** — discover filterable properties for each collection
+- **Web admin UI** — dashboard, workspace and layer management, data import, interactive map and table views
 - **Workspaces** — organize layers by theme or project
+- **OpenAPI documentation** — auto-generated from route schemas
+
+### Planned
+
+- **CQL2 filtering** — filter features by attributes and geometry
+- **Vector tiles** — Mapbox Vector Tiles (MVT) via `ST_AsMVT`
+- **Shapefile import** — via `ogr2ogr` with SRID detection and reprojection
+- **Async ingestion** — background workers with pg-boss for large datasets
 
 ## What Sanson is not
 
@@ -41,13 +48,11 @@ Sanson exposes geographic data stored in PostgreSQL/PostGIS via clean, modern RE
 
 ## Tech stack
 
-| Component     | Technology                        |
-| ------------- | --------------------------------- |
-| API + Worker  | Node.js 24 + TypeScript + Fastify |
-| Database      | PostgreSQL 16 + PostGIS 3.4       |
-| Job queue     | PostgreSQL + pg-boss              |
-| Geo ingestion | ogr2ogr (GDAL) + PostgreSQL COPY  |
-| Admin UI      | React + MapLibre GL JS + Vite     |
+| Component | Technology                                   |
+| --------- | -------------------------------------------- |
+| API       | Node.js 24 + TypeScript + Fastify 5          |
+| Database  | PostgreSQL 16 + PostGIS 3.4                  |
+| Admin UI  | React 19 + Vite + Tailwind CSS + MapLibre GL |
 
 ---
 
@@ -58,13 +63,12 @@ Sanson exposes geographic data stored in PostgreSQL/PostGIS via clean, modern RE
 - [Node.js 24](https://nodejs.org) (via [nvm](https://github.com/nvm-sh/nvm): `nvm use`)
 - [pnpm](https://pnpm.io): `npm install -g pnpm`
 - [Docker](https://www.docker.com) (for the database and integration tests)
-- [GDAL](https://gdal.org) (`brew install gdal` on macOS)
 
 ### Setup
 
 ```bash
 # Clone the repo and navigate to it
-git clone <repo-url> && cd sanson
+git clone https://github.com/sebprunier/sanson.git && cd sanson
 
 # Use the right Node version
 nvm use
@@ -80,18 +84,25 @@ docker compose -f docker/compose.yml up -d
 
 # Start the API in dev mode
 pnpm dev
+
+# Start the admin UI in dev mode (separate terminal)
+pnpm --filter @sanson/admin dev
 ```
 
-The API is available at `http://localhost:3000`.
+The API is available at `http://localhost:3000`, and the admin UI at `http://localhost:5173`.
 
 ### Key endpoints
 
 ```
-GET /              OGC landing page
-GET /conformance   OGC conformance declaration
-GET /collections   List all feature collections
-GET /api           OpenAPI 3.0 specification
-GET /health        Database connectivity check
+GET /                                        OGC landing page
+GET /conformance                             OGC conformance declaration
+GET /collections                             List all feature collections
+GET /collections/{id}/items                  Features with pagination and bbox filter
+GET /collections/{id}/items/{fid}            Single feature by ID
+GET /collections/{id}/queryables             Queryable properties (JSON Schema)
+GET /api                                     OpenAPI 3.0 specification
+GET /health                                  Database connectivity check
+POST /api/admin/import                       Import a GeoJSON file
 ```
 
 ---
@@ -103,25 +114,16 @@ GET /health        Database connectivity check
 ```
 sanson/
 ├── packages/
-│   ├── core/       Shared types, DB utilities, CQL2 parser
-│   ├── api/        Fastify server — OGC API + admin routes
-│   └── worker/     pg-boss workers — data ingestion pipeline
+│   └── api/        Fastify server — OGC API + admin routes
 ├── apps/
-│   └── admin/      React admin UI (MapLibre GL)
+│   └── admin/      React admin UI (Tailwind CSS + MapLibre GL)
 ├── docker/
-│   └── compose.yml PostgreSQL + PostGIS
+│   └── compose.yml PostgreSQL + PostGIS (port 5433)
+├── scripts/
+│   └── init.sql    Database initialization
+├── data/           Test datasets
 └── SPECS.md        Full project specifications
 ```
-
-### Node mode
-
-Sanson ships as a single binary. The `NODE_MODE` environment variable controls what starts:
-
-| Value    | Behavior                                     |
-| -------- | -------------------------------------------- |
-| `api`    | HTTP server only                             |
-| `worker` | Ingestion workers only                       |
-| `all`    | Both (default — recommended for development) |
 
 ### Commands
 
@@ -138,6 +140,9 @@ pnpm --filter @sanson/api test:watch
 # Dev server (hot reload, reads .env automatically)
 pnpm dev
 
+# Admin UI dev server (proxies API calls to localhost:3000)
+pnpm --filter @sanson/admin dev
+
 # Lint
 pnpm lint
 
@@ -147,7 +152,6 @@ pnpm format
 
 ### Testing
 
-- **Unit tests** — pure logic (CQL2 parser, utilities), no external dependencies
 - **Integration tests** — real HTTP via `fastify.inject` + real PostgreSQL/PostGIS via [Testcontainers](https://testcontainers.com)
 - No mocking of the database — if it passes tests, it works against a real PostGIS instance
 
