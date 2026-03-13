@@ -44,8 +44,10 @@ pnpm install                                # install deps
 docker compose -f docker/compose.yml up -d  # start DB (port 5433)
 pnpm dev                                    # API dev server (port 3000)
 pnpm --filter @sanson/admin dev             # admin UI dev server (port 5173)
-pnpm test                                   # run all tests
+pnpm test                                   # run all tests (API unit + integration)
 pnpm --filter @sanson/api test              # run api tests only
+pnpm --filter @sanson/admin e2e             # run E2E tests (needs API + UI running)
+pnpm --filter @sanson/admin e2e:headed      # same, with visible browser
 ```
 
 ## Coding conventions

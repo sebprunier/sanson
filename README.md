@@ -143,6 +143,12 @@ pnpm dev
 # Admin UI dev server (proxies API calls to localhost:3000)
 pnpm --filter @sanson/admin dev
 
+# E2E tests (requires API + admin UI running)
+pnpm --filter @sanson/admin e2e
+
+# E2E tests with visible browser
+pnpm --filter @sanson/admin e2e:headed
+
 # Lint
 pnpm lint
 
@@ -153,6 +159,7 @@ pnpm format
 ### Testing
 
 - **Integration tests** — real HTTP via `fastify.inject` + real PostgreSQL/PostGIS via [Testcontainers](https://testcontainers.com)
+- **E2E tests** — [Playwright](https://playwright.dev) with Chromium, testing the admin UI against a running API
 - No mocking of the database — if it passes tests, it works against a real PostGIS instance
 
 ---
