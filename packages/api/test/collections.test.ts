@@ -190,3 +190,155 @@ describe('GET /collections/:collectionId', () => {
     expect(response.statusCode).toBe(404)
   })
 })
+
+describe('GET /collections/:collectionId/items', () => {
+  let container: StartedPostgreSqlContainer
+
+  beforeAll(async () => {
+    container = await new PostgreSqlContainer('postgis/postgis:16-3.4').start()
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+    await db.query(initSql)
+
+    // Create a workspace and layer
+    await db.query(
+      `INSERT INTO sanson_workspaces (id, name)
+       VALUES ('00000000-0000-0000-0000-000000000020', 'test')`,
+    )
+
+    // Create a data table with 3 points
+    await db.query(`
+      CREATE TABLE test_sites (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100),
+        geom GEOMETRY(Point, 4326)
+      )
+    `)
+    await db.query(`CREATE INDEX idx_test_sites_geom ON test_sites USING GIST (geom)`)
+    await db.query(`
+      INSERT INTO test_sites (name, geom) VALUES
+        ('Paris',     ST_SetSRID(ST_MakePoint(2.35, 48.86), 4326)),
+        ('Lyon',      ST_SetSRID(ST_MakePoint(4.83, 45.76), 4326)),
+        ('Marseille', ST_SetSRID(ST_MakePoint(5.37, 43.30), 4326))
+    `)
+
+    // Register the layer
+    await db.query(
+      `INSERT INTO sanson_layers (workspace_id, name, table_name, geometry_column, id_column, srid)
+       VALUES ('00000000-0000-0000-0000-000000000020', 'sites', 'test_sites', 'geom', 'id', 4326)`,
+    )
+
+    await db.end()
+  })
+
+  afterAll(async () => {
+    await container.stop()
+  })
+
+  it('returns a FeatureCollection with all features', async () => {
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+    const app = buildApp(db)
+    const response = await app.inject({ method: 'GET', url: '/collections/test:sites/items' })
+    await app.close()
+
+    expect(response.statusCode).toBe(200)
+    const body = response.json()
+    expect(body.type).toBe('FeatureCollection')
+    expect(body.features).toHaveLength(3)
+    expect(body.numberMatched).toBe(3)
+    expect(body.numberReturned).toBe(3)
+    expect(body.timeStamp).toBeDefined()
+  })
+
+  it('returns valid GeoJSON features', async () => {
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+    const app = buildApp(db)
+    const response = await app.inject({ method: 'GET', url: '/collections/test:sites/items' })
+    await app.close()
+
+    const body = response.json()
+    const paris = body.features.find(
+      (f: { properties: { name: string } }) => f.properties.name === 'Paris',
+    )
+    expect(paris).toBeDefined()
+    expect(paris.type).toBe('Feature')
+    expect(paris.geometry.type).toBe('Point')
+    expect(paris.geometry.coordinates[0]).toBeCloseTo(2.35, 1)
+    expect(paris.geometry.coordinates[1]).toBeCloseTo(48.86, 1)
+  })
+
+  it('paginates with limit and offset', async () => {
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+    const app = buildApp(db)
+    const response = await app.inject({
+      method: 'GET',
+      url: '/collections/test:sites/items?limit=2',
+    })
+    await app.close()
+
+    const body = response.json()
+    expect(body.features).toHaveLength(2)
+    expect(body.numberMatched).toBe(3)
+    expect(body.numberReturned).toBe(2)
+
+    const rels = body.links.map((l: { rel: string }) => l.rel)
+    expect(rels).toContain('next')
+    expect(rels).not.toContain('prev')
+  })
+
+  it('returns last page without next link', async () => {
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+    const app = buildApp(db)
+    const response = await app.inject({
+      method: 'GET',
+      url: '/collections/test:sites/items?limit=2&offset=2',
+    })
+    await app.close()
+
+    const body = response.json()
+    expect(body.features).toHaveLength(1)
+    expect(body.numberMatched).toBe(3)
+
+    const rels = body.links.map((l: { rel: string }) => l.rel)
+    expect(rels).not.toContain('next')
+    expect(rels).toContain('prev')
+  })
+
+  it('filters by bbox', async () => {
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+    const app = buildApp(db)
+    // bbox covering only Paris area
+    const response = await app.inject({
+      method: 'GET',
+      url: '/collections/test:sites/items?bbox=1,48,3,49',
+    })
+    await app.close()
+
+    const body = response.json()
+    expect(body.features).toHaveLength(1)
+    expect(body.features[0].properties.name).toBe('Paris')
+    expect(body.numberMatched).toBe(1)
+  })
+
+  it('sets X-Total-Count and Link headers', async () => {
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+    const app = buildApp(db)
+    const response = await app.inject({
+      method: 'GET',
+      url: '/collections/test:sites/items?limit=2',
+    })
+    await app.close()
+
+    expect(response.headers['x-total-count']).toBe('3')
+    expect(response.headers['link']).toContain('rel="self"')
+    expect(response.headers['link']).toContain('rel="next"')
+  })
+
+  it('returns 404 for unknown collection', async () => {
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+    const app = buildApp(db)
+    const response = await app.inject({ method: 'GET', url: '/collections/foo:bar/items' })
+    await app.close()
+
+    expect(response.statusCode).toBe(404)
+  })
+})
