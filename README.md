@@ -28,7 +28,8 @@ Sanson exposes geographic data stored in PostgreSQL/PostGIS via clean, modern RE
 - **CQL2 filtering** — filter features by attributes and geometry using the OGC CQL2 Text standard (`=`, `<>`, `<`, `>`, `AND`, `OR`, `NOT`, `LIKE`, `IN`, `IS NULL`, `S_INTERSECTS`, `S_WITHIN`, `S_CONTAINS`)
 - **GeoJSON import** — synchronous import with automatic table creation and spatial indexing
 - **Queryables** — discover filterable properties for each collection
-- **Web admin UI** — dashboard, workspace and layer management, data import, interactive map and table views
+- **Web admin UI** — dashboard, workspace and layer management, data import, interactive map and table views with CQL2 filter
+- **API Explorer** — interactive API documentation powered by [Scalar](https://scalar.com), built into the admin UI
 - **Workspaces** — organize layers by theme or project
 - **OpenAPI documentation** — auto-generated from route schemas
 
