@@ -75,7 +75,9 @@ export function LayerDetail() {
         </TabButton>
       </div>
 
-      {tab === 'map' && <MapView collectionId={collectionId} bbox={layer.bbox} />}
+      {tab === 'map' && (
+        <MapView collectionId={collectionId} bbox={layer.bbox} geometryType={layer.geometry_type} />
+      )}
       {tab === 'table' && <TableView collectionId={collectionId} />}
       {tab === 'schema' && <SchemaView layerId={layer.id} />}
       {tab === 'history' && <HistoryView layerId={layer.id} />}
@@ -106,9 +108,20 @@ function TabButton({
   )
 }
 
-function MapView({ collectionId, bbox }: { collectionId: string; bbox: string | null }) {
+function MapView({
+  collectionId,
+  bbox,
+  geometryType,
+}: {
+  collectionId: string
+  bbox: string | null
+  geometryType: string | null
+}) {
   const mapContainer = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
+
+  // Extract layer name from collectionId (workspace:name → name) for MVT source-layer
+  const layerName = collectionId.includes(':') ? collectionId.split(':')[1] : collectionId
 
   useEffect(() => {
     if (!mapContainer.current || mapRef.current) return
@@ -133,25 +146,29 @@ function MapView({ collectionId, bbox }: { collectionId: string; bbox: string | 
 
     map.addControl(new maplibregl.NavigationControl(), 'top-right')
 
-    map.on('load', async () => {
-      const res = await fetch(`/collections/${collectionId}/items?limit=1000`)
-      const data = await res.json()
+    map.on('load', () => {
+      map.addSource('features', {
+        type: 'vector',
+        tiles: [`${window.location.origin}/collections/${collectionId}/tiles/{z}/{x}/{y}.pbf`],
+        minzoom: 0,
+        maxzoom: 14,
+      })
 
-      map.addSource('features', { type: 'geojson', data })
-
-      const geomType = data.features?.[0]?.geometry?.type ?? ''
+      const geomType = geometryType ?? ''
 
       if (geomType.includes('Polygon')) {
         map.addLayer({
           id: 'features-fill',
           type: 'fill',
           source: 'features',
+          'source-layer': layerName,
           paint: { 'fill-color': '#1B4F72', 'fill-opacity': 0.3 },
         })
         map.addLayer({
           id: 'features-line',
           type: 'line',
           source: 'features',
+          'source-layer': layerName,
           paint: { 'line-color': '#1B4F72', 'line-width': 1.5 },
         })
       } else if (geomType.includes('Line')) {
@@ -159,6 +176,7 @@ function MapView({ collectionId, bbox }: { collectionId: string; bbox: string | 
           id: 'features-line',
           type: 'line',
           source: 'features',
+          'source-layer': layerName,
           paint: { 'line-color': '#1B4F72', 'line-width': 2 },
         })
       } else {
@@ -166,6 +184,7 @@ function MapView({ collectionId, bbox }: { collectionId: string; bbox: string | 
           id: 'features-circle',
           type: 'circle',
           source: 'features',
+          'source-layer': layerName,
           paint: {
             'circle-radius': 6,
             'circle-color': '#1B4F72',
@@ -214,7 +233,7 @@ function MapView({ collectionId, bbox }: { collectionId: string; bbox: string | 
       map.remove()
       mapRef.current = null
     }
-  }, [collectionId, bbox])
+  }, [collectionId, bbox, geometryType, layerName])
 
   return <div ref={mapContainer} className="w-full h-[600px] rounded-lg border border-gray-200" />
 }
