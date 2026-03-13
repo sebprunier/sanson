@@ -5,8 +5,10 @@ import { rootRoutes } from './routes/root'
 import { conformanceRoutes } from './routes/conformance'
 import { collectionsRoutes } from './routes/collections'
 import { apiRoutes } from './routes/api'
+import multipart from '@fastify/multipart'
 import { adminWorkspacesRoutes } from './routes/admin/workspaces'
 import { adminLayersRoutes } from './routes/admin/layers'
+import { adminImportRoutes } from './routes/admin/import'
 import { healthRoutes } from './routes/health'
 
 interface AppOptions {
@@ -30,6 +32,8 @@ export function buildApp(db: Pool, options: AppOptions = {}): FastifyInstance {
     },
   })
 
+  app.register(multipart, { limits: { fileSize: 100 * 1024 * 1024 } }) // 100MB max
+
   app.addHook('onClose', async () => {
     await db.end()
   })
@@ -39,6 +43,7 @@ export function buildApp(db: Pool, options: AppOptions = {}): FastifyInstance {
   app.register(collectionsRoutes, { db })
   app.register(adminWorkspacesRoutes, { db })
   app.register(adminLayersRoutes, { db })
+  app.register(adminImportRoutes, { db })
   app.register(apiRoutes)
   app.register(healthRoutes, { db })
 
