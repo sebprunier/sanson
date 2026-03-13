@@ -22,7 +22,6 @@ Full specifications are in [`SPECS.md`](./SPECS.md). Read it before making signi
 
 - **Job queue**: pg-boss (PostgreSQL-based, no Redis or external queue)
 - **Geo ingestion**: `ogr2ogr` CLI + PostgreSQL `COPY` for Shapefile support and large volumes
-- **CQL2 filtering**: CQL2 Text parser for attribute filtering
 - **Vector tiles**: MVT via `ST_AsMVT`
 
 ## Monorepo layout

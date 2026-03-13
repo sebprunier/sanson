@@ -1,5 +1,6 @@
 import { FastifyInstance, FastifyReply } from 'fastify'
 import { Pool } from 'pg'
+import { parseCql2Text } from '../cql2'
 
 interface CollectionsRouteOptions {
   db: Pool
@@ -235,7 +236,13 @@ export async function collectionsRoutes(
   // GET /collections/:collectionId/items
   app.get<{
     Params: { collectionId: string }
-    Querystring: { limit?: string; offset?: string; bbox?: string }
+    Querystring: {
+      limit?: string
+      offset?: string
+      bbox?: string
+      filter?: string
+      'filter-lang'?: string
+    }
   }>('/collections/:collectionId/items', {
     schema: {
       tags: ['OGC'],
@@ -260,6 +267,8 @@ export async function collectionsRoutes(
           },
           offset: { type: 'string', description: 'Start index (default 0)' },
           bbox: { type: 'string', description: 'Bounding box filter: minLon,minLat,maxLon,maxLat' },
+          filter: { type: 'string', description: 'CQL2 Text filter expression' },
+          'filter-lang': { type: 'string', description: 'Filter language (default: cql2-text)' },
         },
       },
       response: { 200: featureCollectionResponseSchema },
@@ -291,6 +300,48 @@ export async function collectionsRoutes(
           )
           params.push(...bbox)
           paramIndex += 4
+        }
+      }
+
+      // CQL2 Text filter
+      if (request.query.filter) {
+        const filterLang = request.query['filter-lang'] ?? 'cql2-text'
+        if (filterLang !== 'cql2-text') {
+          reply.status(400)
+          return {
+            statusCode: 400,
+            error: 'Bad Request',
+            message: `Unsupported filter-lang: ${filterLang}`,
+          }
+        }
+
+        // Get allowed columns for validation
+        const { rows: colRows } = await options.db.query<{ column_name: string }>(
+          `SELECT column_name FROM information_schema.columns
+           WHERE table_name = $1 AND column_name NOT IN ($2)`,
+          [layer.table_name, layer.id_column],
+        )
+        const allowedColumns = new Set(colRows.map((r) => r.column_name))
+
+        try {
+          const cqlResult = parseCql2Text(request.query.filter, {
+            startParamIndex: paramIndex,
+            geometryColumn: layer.geometry_column,
+            srid: layer.srid,
+            allowedColumns,
+          })
+          if (cqlResult.sql) {
+            conditions.push(cqlResult.sql)
+            params.push(...cqlResult.params)
+            paramIndex += cqlResult.params.length
+          }
+        } catch (err) {
+          reply.status(400)
+          return {
+            statusCode: 400,
+            error: 'Bad Request',
+            message: `Invalid CQL2 filter: ${err instanceof Error ? err.message : String(err)}`,
+          }
         }
       }
 

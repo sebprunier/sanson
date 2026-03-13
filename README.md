@@ -25,6 +25,7 @@ Sanson exposes geographic data stored in PostgreSQL/PostGIS via clean, modern RE
 ## Features
 
 - **OGC API — Features compliant** — compatible out of the box with QGIS, ArcGIS, FME, and any OGC-compliant client
+- **CQL2 filtering** — filter features by attributes and geometry using the OGC CQL2 Text standard (`=`, `<>`, `<`, `>`, `AND`, `OR`, `NOT`, `LIKE`, `IN`, `IS NULL`, `S_INTERSECTS`, `S_WITHIN`, `S_CONTAINS`)
 - **GeoJSON import** — synchronous import with automatic table creation and spatial indexing
 - **Queryables** — discover filterable properties for each collection
 - **Web admin UI** — dashboard, workspace and layer management, data import, interactive map and table views
@@ -33,7 +34,6 @@ Sanson exposes geographic data stored in PostgreSQL/PostGIS via clean, modern RE
 
 ### Planned
 
-- **CQL2 filtering** — filter features by attributes and geometry
 - **Vector tiles** — Mapbox Vector Tiles (MVT) via `ST_AsMVT`
 - **Shapefile import** — via `ogr2ogr` with SRID detection and reprojection
 - **Async ingestion** — background workers with pg-boss for large datasets
