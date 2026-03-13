@@ -1,0 +1,51 @@
+-- Sanson metadata tables
+-- Run once against a fresh database to bootstrap the schema.
+
+CREATE EXTENSION IF NOT EXISTS postgis;
+
+-- Workspaces
+CREATE TABLE IF NOT EXISTS sanson_workspaces (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name        VARCHAR(100) UNIQUE NOT NULL,
+    description TEXT,
+    created_at  TIMESTAMPTZ DEFAULT now(),
+    updated_at  TIMESTAMPTZ DEFAULT now()
+);
+
+-- Layers (= OGC Collections)
+CREATE TABLE IF NOT EXISTS sanson_layers (
+    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    workspace_id      UUID REFERENCES sanson_workspaces(id) ON DELETE CASCADE,
+    name              VARCHAR(100) NOT NULL,
+    description       TEXT,
+    attribution       TEXT,
+    table_name        VARCHAR(200) NOT NULL,
+    geometry_column   VARCHAR(100) DEFAULT 'geom',
+    geometry_type     VARCHAR(50),
+    id_column         VARCHAR(100) DEFAULT 'id',
+    datetime_column   VARCHAR(100),
+    srid              INTEGER DEFAULT 4326,
+    bbox              JSONB,
+    temporal_extent   JSONB,
+    exposed_fields    JSONB,
+    style             JSONB,
+    feature_count     BIGINT,
+    created_at        TIMESTAMPTZ DEFAULT now(),
+    updated_at        TIMESTAMPTZ DEFAULT now(),
+    UNIQUE(workspace_id, name)
+);
+
+-- Import history
+CREATE TABLE IF NOT EXISTS sanson_import_history (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    layer_id      UUID REFERENCES sanson_layers(id),
+    job_id        UUID,
+    source_file   VARCHAR(500),
+    source_srid   INTEGER,
+    target_srid   INTEGER,
+    feature_count BIGINT,
+    status        VARCHAR(20),
+    error         TEXT,
+    duration_ms   INTEGER,
+    created_at    TIMESTAMPTZ DEFAULT now()
+);
