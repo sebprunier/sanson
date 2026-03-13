@@ -21,6 +21,10 @@ test.describe('Navigation', () => {
     await sidebar.getByRole('link', { name: 'Import' }).click()
     await expect(page.getByRole('heading', { name: 'Import data' })).toBeVisible()
 
+    // Navigate to API Explorer
+    await sidebar.getByRole('link', { name: 'API Explorer' }).click()
+    await expect(page.locator('.scalar-app').first()).toBeVisible()
+
     // Back to Dashboard
     await sidebar.getByRole('link', { name: 'Dashboard' }).click()
     await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
