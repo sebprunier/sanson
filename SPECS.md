@@ -93,37 +93,33 @@ Sanson is distributed as a **single binary**. Startup behavior is determined by 
 
 This pattern allows scaling API nodes and Worker nodes independently based on load.
 
-```
-                    ┌──────────────────────────────────────┐
-                    │         Clients / Admin UI            │
-                    └────────────┬─────────────────────────┘
-                                 │
-              ┌──────────────────▼──────────────────┐
-              │         API Nodes (NODE_MODE=api)    │
-              │         Node.js / Fastify            │
-              │                                      │
-              │  OGC:   /, /conformance, /api,       │
-              │         /collections/...             │
-              │  Admin: /api/admin/...               │
-              └──────────────────┬──────────────────┘
-                                 │
-              ┌──────────────────▼──────────────────────────────┐
-              │              PostgreSQL + PostGIS                │
-              │                                                  │
-              │  • geo data (per-layer tables + GIST indexes)    │
-              │  • metadata (workspaces, layers, styles)         │
-              │  • job queue (pg-boss)                           │
-              └──────────────────┬──────────────────────────────┘
-                                 │
-              ┌──────────────────▼──────────────────┐
-              │     Worker Nodes (NODE_MODE=worker)  │
-              │                                      │
-              │  1. dequeue a job from the queue      │
-              │  2. run ogr2ogr → CSV + EWKT          │
-              │  3. bulk COPY → PostgreSQL             │
-              │  4. create GIST spatial index          │
-              │  5. update layer metadata              │
-              └──────────────────────────────────────┘
+```mermaid
+graph TD
+    Clients["Clients / Admin UI"]
+
+    subgraph API ["API Nodes (NODE_MODE=api) — Node.js / Fastify"]
+        OGC["OGC: /, /conformance, /api, /collections/..."]
+        Admin["Admin: /api/admin/..."]
+    end
+
+    subgraph DB ["PostgreSQL + PostGIS"]
+        GeoData["Geo data (per-layer tables + GIST indexes)"]
+        Meta["Metadata (workspaces, layers, styles)"]
+        Queue["Job queue (pg-boss)"]
+    end
+
+    subgraph Worker ["Worker Nodes (NODE_MODE=worker)"]
+        W1["1. Dequeue a job from the queue"]
+        W2["2. Run ogr2ogr → CSV + EWKT"]
+        W3["3. Bulk COPY → PostgreSQL"]
+        W4["4. Create GIST spatial index"]
+        W5["5. Update layer metadata"]
+        W1 --> W2 --> W3 --> W4 --> W5
+    end
+
+    Clients --> API
+    API --> DB
+    DB --> Worker
 ```
 
 ### 5.3 Route separation
@@ -139,27 +135,16 @@ This separation ensures that OGC endpoints live exactly where the spec expects t
 
 ### 5.4 Ingestion pipeline
 
-```
-Uploaded file (.shp, .geojson)
-        │
-        ▼
-ogr2ogr (source SRID detection, reprojection to target SRID)
-  → CSV export with geometry as EWKT (SRID=XXXX; prefix)
-  → options: -lco GEOMETRY=AS_WKT -lco SEPARATOR=SEMICOLON
-        │
-        ▼
-(optional) field transformation — filtering, renaming
-        │
-        ▼
-Bulk COPY to PostgreSQL
-  → DELIMITER ';' CSV HEADER
-  → FREEZE option for initial loads (bypasses WAL, faster)
-        │
-        ▼
-Create GIST spatial index on the geometry column
-        │
-        ▼
-Update layer metadata (bbox, feature_count, temporal_extent)
+```mermaid
+flowchart TD
+    Upload["Uploaded file (.shp, .geojson)"]
+    Ogr2ogr["ogr2ogr\nSource SRID detection, reprojection to target SRID\nCSV export with EWKT geometry (SRID=XXXX;)\nOptions: -lco GEOMETRY=AS_WKT -lco SEPARATOR=SEMICOLON"]
+    Transform["(optional) Field transformation\nFiltering, renaming"]
+    Copy["Bulk COPY to PostgreSQL\nDELIMITER ';' CSV HEADER\nFREEZE option for initial loads"]
+    Index["Create GIST spatial index\non the geometry column"]
+    Metadata["Update layer metadata\n(bbox, feature_count, temporal_extent)"]
+
+    Upload --> Ogr2ogr --> Transform --> Copy --> Index --> Metadata
 ```
 
 **Implementation notes (from auxalentours-api):**
