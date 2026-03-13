@@ -88,6 +88,41 @@ pnpm --filter @sanson/admin e2e:headed      # same, with visible browser
 - **Table prefix `sanson_`** for metadata tables (workspaces, layers, import history) — no dedicated schema for now, revisit later if needed
 - **Vite proxy** — admin UI dev server on port 5173 proxies `/api`, `/collections`, `/conformance`, `/health` to API on port 3000
 
+## Roadmap / next steps
+
+### 1. pg-boss + async workers
+
+- Add `packages/worker/` with pg-boss job queue (PostgreSQL-based)
+- Async ingestion with progress tracking, retry logic, and logs
+- `NODE_MODE` env var to run API-only, worker-only, or both
+- Admin API routes for job status and logs
+
+### 2. Shapefile support
+
+- Import via `ogr2ogr` (GDAL CLI) with SRID detection and reprojection
+- Depends on pg-boss for async processing (large files)
+- PostgreSQL `COPY` for bulk insert performance
+
+### 3. UI improvements
+
+- Layer editing: description, attribution, exposed fields, datetime_column, style JSON
+- Real-time import progress (polling pg-boss job status)
+- `datetime_column` configuration in layer settings
+
+### 4. Quick wins
+
+- GeoJSON export / download endpoint
+- Docker build for production deployment
+- `packages/core/` extraction (shared types, CQL2 parser)
+
+### 5. Conformance V2
+
+- CQL2 JSON encoding (currently only CQL2 Text)
+- CQL2 Temporal operators
+- CQL2 Spatial full (beyond S_INTERSECTS, S_WITHIN, S_CONTAINS)
+- CRS by Reference (content negotiation for coordinate systems)
+- OGC API Tiles conformance class
+
 ## Out of scope — do not add
 
 - Authentication / authorization
