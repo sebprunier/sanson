@@ -10,6 +10,7 @@
  * - Spatial: S_INTERSECTS, S_WITHIN, S_CONTAINS, S_TOUCHES, S_CROSSES, S_OVERLAPS, S_EQUALS, S_DISJOINT
  * - Range: BETWEEN x AND y, NOT BETWEEN x AND y
  * - Negated: NOT IN, NOT LIKE, NOT ILIKE
+ * - Temporal: T_AFTER, T_BEFORE, T_DURING, T_EQUALS, T_INTERSECTS, T_DISJOINT
  */
 
 export interface CqlResult {
@@ -47,6 +48,15 @@ const KEYWORDS = new Set([
   'S_EQUALS',
   'S_DISJOINT',
   'BETWEEN',
+  'T_AFTER',
+  'T_BEFORE',
+  'T_DURING',
+  'T_EQUALS',
+  'T_INTERSECTS',
+  'T_DISJOINT',
+  'TIMESTAMP',
+  'DATE',
+  'INTERVAL',
 ])
 
 const OPERATORS = ['<>', '<=', '>=', '=', '<', '>']
@@ -246,6 +256,11 @@ class Parser {
       return this.parseSpatialFunction()
     }
 
+    // Temporal functions
+    if (token?.type === 'keyword' && (token as { value: string }).value.startsWith('T_')) {
+      return this.parseTemporalFunction()
+    }
+
     // Identifier-based expressions (comparison, IS NULL, IN, LIKE)
     if (token?.type === 'identifier') {
       return this.parseComparison()
@@ -394,6 +409,96 @@ class Parser {
     this.params.push(geomValue)
     const geomParam = `ST_Transform(ST_GeomFromText($${this.paramIndex++}, 4326), ${this.srid})`
     return `${pgFunc}(${this.geometryColumn}, ${geomParam})`
+  }
+
+  private parseTemporalFunction(): string {
+    const funcToken = this.advance() as { type: 'keyword'; value: string }
+    const op = funcToken.value
+
+    this.expect('lparen')
+
+    // First arg: property name
+    const firstArg = this.advance()
+    if (firstArg.type !== 'identifier') {
+      throw new Error('First argument of temporal function must be a property name')
+    }
+    const column = this.validateColumn(firstArg.value)
+
+    this.expect('comma')
+
+    // Second arg: temporal literal (TIMESTAMP, DATE, or INTERVAL)
+    const literalToken = this.peek()
+    if (literalToken?.type !== 'keyword') {
+      throw new Error('Expected TIMESTAMP, DATE, or INTERVAL')
+    }
+
+    const literalType = (literalToken as { value: string }).value
+
+    if (literalType === 'TIMESTAMP' || literalType === 'DATE') {
+      this.advance()
+      this.expect('lparen')
+      const val = this.parseValue()
+      this.expect('rparen')
+      this.expect('rparen') // close temporal function
+
+      if (op === 'T_BEFORE') {
+        this.params.push(val)
+        return `${column} < $${this.paramIndex++}`
+      }
+      if (op === 'T_AFTER') {
+        this.params.push(val)
+        return `${column} > $${this.paramIndex++}`
+      }
+      if (op === 'T_EQUALS') {
+        this.params.push(val)
+        return `${column} = $${this.paramIndex++}`
+      }
+      throw new Error(`Temporal operator ${op} requires an INTERVAL argument, not ${literalType}`)
+    }
+
+    if (literalType === 'INTERVAL') {
+      this.advance()
+      this.expect('lparen')
+      const start = this.parseValue() as string
+      this.expect('comma')
+      const end = this.parseValue() as string
+      this.expect('rparen')
+      this.expect('rparen') // close temporal function
+
+      if (op === 'T_DURING' || op === 'T_INTERSECTS') {
+        if (start === '..') {
+          this.params.push(end)
+          return `${column} <= $${this.paramIndex++}`
+        }
+        if (end === '..') {
+          this.params.push(start)
+          return `${column} >= $${this.paramIndex++}`
+        }
+        this.params.push(start)
+        const startParam = `$${this.paramIndex++}`
+        this.params.push(end)
+        const endParam = `$${this.paramIndex++}`
+        return `${column} BETWEEN ${startParam} AND ${endParam}`
+      }
+      if (op === 'T_DISJOINT') {
+        if (start === '..') {
+          this.params.push(end)
+          return `${column} > $${this.paramIndex++}`
+        }
+        if (end === '..') {
+          this.params.push(start)
+          return `${column} < $${this.paramIndex++}`
+        }
+        this.params.push(start)
+        const startParam = `$${this.paramIndex++}`
+        this.params.push(end)
+        const endParam = `$${this.paramIndex++}`
+        return `(${column} < ${startParam} OR ${column} > ${endParam})`
+      }
+      throw new Error(`Temporal operator ${op} does not support INTERVAL arguments`)
+    }
+
+    throw new Error('Expected TIMESTAMP, DATE, or INTERVAL')
   }
 
   private validateColumn(name: string): string {

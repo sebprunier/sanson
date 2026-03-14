@@ -110,7 +110,6 @@ pnpm --filter @sanson/admin e2e:headed      # same, with visible browser
 
 ### 3. Conformance V2
 
-- CQL2 Temporal operators
 - CRS by Reference (content negotiation for coordinate systems)
 
 ### 4. OGC CITE validation

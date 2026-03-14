@@ -9,6 +9,7 @@
  * - List: in
  * - Range: between
  * - Spatial: s_intersects, s_within, s_contains, s_touches, s_crosses, s_overlaps, s_equals, s_disjoint
+ * - Temporal: t_after, t_before, t_during, t_equals, t_intersects, t_disjoint
  */
 
 import type { CqlResult, CqlParseOptions } from './cql2'
@@ -21,6 +22,9 @@ type CqlJsonExpr =
   | boolean
 
 const COMPARISON_OPS = new Set(['=', '<>', '<', '<=', '>', '>='])
+
+const TEMPORAL_INSTANT_OPS = new Set(['t_before', 't_after', 't_equals'])
+const TEMPORAL_INTERVAL_OPS = new Set(['t_during', 't_intersects', 't_disjoint'])
 
 const SPATIAL_OPS: Record<string, string> = {
   s_intersects: 'ST_Intersects',
@@ -100,6 +104,11 @@ class JsonParser {
     // Spatial operators
     if (SPATIAL_OPS[op]) {
       return this.evaluateSpatial(op, args)
+    }
+
+    // Temporal operators
+    if (TEMPORAL_INSTANT_OPS.has(op) || TEMPORAL_INTERVAL_OPS.has(op)) {
+      return this.evaluateTemporal(op, args)
     }
 
     throw new Error(`Unsupported CQL2 JSON operator: "${expr.op}"`)
@@ -234,6 +243,84 @@ class JsonParser {
     this.params.push(geomJson)
     const geomParam = `ST_Transform(ST_GeomFromGeoJSON($${this.paramIndex++}), ${this.srid})`
     return `${pgFunc}(${this.geometryColumn}, ${geomParam})`
+  }
+
+  private evaluateTemporal(op: string, args: unknown[]): string {
+    if (args.length !== 2) {
+      throw new Error(`"${op}" requires exactly 2 arguments`)
+    }
+    const column = this.resolveProperty(args[0])
+    const temporal = args[1]
+
+    if (typeof temporal !== 'object' || temporal === null) {
+      throw new Error(`Second argument of "${op}" must be a temporal literal`)
+    }
+
+    const obj = temporal as Record<string, unknown>
+
+    // Instant operators (timestamp or date)
+    if (TEMPORAL_INSTANT_OPS.has(op)) {
+      const value = this.resolveTemporalInstant(obj)
+      this.params.push(value)
+      if (op === 't_before') return `${column} < $${this.paramIndex++}`
+      if (op === 't_after') return `${column} > $${this.paramIndex++}`
+      // t_equals
+      return `${column} = $${this.paramIndex++}`
+    }
+
+    // Interval operators
+    if (!('interval' in obj)) {
+      // Allow instant args for t_during/t_intersects — treat as point interval
+      const value = this.resolveTemporalInstant(obj)
+      this.params.push(value)
+      if (op === 't_disjoint') return `${column} <> $${this.paramIndex++}`
+      // t_during, t_intersects with instant → equals
+      return `${column} = $${this.paramIndex++}`
+    }
+
+    const interval = obj.interval as string[]
+    if (!Array.isArray(interval) || interval.length !== 2) {
+      throw new Error('interval must be an array of 2 values')
+    }
+
+    const [start, end] = interval
+
+    if (op === 't_during' || op === 't_intersects') {
+      if (start === '..') {
+        this.params.push(end)
+        return `${column} <= $${this.paramIndex++}`
+      }
+      if (end === '..') {
+        this.params.push(start)
+        return `${column} >= $${this.paramIndex++}`
+      }
+      this.params.push(start)
+      const startParam = `$${this.paramIndex++}`
+      this.params.push(end)
+      const endParam = `$${this.paramIndex++}`
+      return `${column} BETWEEN ${startParam} AND ${endParam}`
+    }
+
+    // t_disjoint
+    if (start === '..') {
+      this.params.push(end)
+      return `${column} > $${this.paramIndex++}`
+    }
+    if (end === '..') {
+      this.params.push(start)
+      return `${column} < $${this.paramIndex++}`
+    }
+    this.params.push(start)
+    const startParam = `$${this.paramIndex++}`
+    this.params.push(end)
+    const endParam = `$${this.paramIndex++}`
+    return `(${column} < ${startParam} OR ${column} > ${endParam})`
+  }
+
+  private resolveTemporalInstant(obj: Record<string, unknown>): string {
+    if ('timestamp' in obj) return obj.timestamp as string
+    if ('date' in obj) return obj.date as string
+    throw new Error('Expected a temporal literal (timestamp, date, or interval)')
   }
 
   private resolveProperty(arg: unknown): string {

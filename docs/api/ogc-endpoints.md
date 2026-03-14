@@ -52,7 +52,7 @@ Declares the OGC conformance classes supported by Sanson:
 | Tileset                  | Implemented |
 | Tile Matrix Set          | Implemented |
 | CQL2 JSON                | Implemented |
-| CQL2 Temporal            | Planned     |
+| CQL2 Temporal            | Implemented |
 | CRS by Reference         | Planned     |
 
 ## OpenAPI specification

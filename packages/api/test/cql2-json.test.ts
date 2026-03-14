@@ -271,6 +271,98 @@ describe('CQL2 JSON parser', () => {
     })
   })
 
+  describe('temporal operators', () => {
+    it('t_before with timestamp', () => {
+      const r = parse({
+        op: 't_before',
+        args: [{ property: 'status' }, { timestamp: '2024-01-01T00:00:00Z' }],
+      })
+      expect(r.sql).toBe('status < $1')
+      expect(r.params).toEqual(['2024-01-01T00:00:00Z'])
+    })
+
+    it('t_after with date', () => {
+      const r = parse({
+        op: 't_after',
+        args: [{ property: 'status' }, { date: '2024-06-15' }],
+      })
+      expect(r.sql).toBe('status > $1')
+      expect(r.params).toEqual(['2024-06-15'])
+    })
+
+    it('t_equals with timestamp', () => {
+      const r = parse({
+        op: 't_equals',
+        args: [{ property: 'status' }, { timestamp: '2024-01-01T12:00:00Z' }],
+      })
+      expect(r.sql).toBe('status = $1')
+      expect(r.params).toEqual(['2024-01-01T12:00:00Z'])
+    })
+
+    it('t_during with interval', () => {
+      const r = parse({
+        op: 't_during',
+        args: [{ property: 'status' }, { interval: ['2024-01-01', '2024-12-31'] }],
+      })
+      expect(r.sql).toBe('status BETWEEN $1 AND $2')
+      expect(r.params).toEqual(['2024-01-01', '2024-12-31'])
+    })
+
+    it('t_intersects with interval', () => {
+      const r = parse({
+        op: 't_intersects',
+        args: [{ property: 'status' }, { interval: ['2024-01-01', '2024-12-31'] }],
+      })
+      expect(r.sql).toBe('status BETWEEN $1 AND $2')
+      expect(r.params).toEqual(['2024-01-01', '2024-12-31'])
+    })
+
+    it('t_during with open-ended start', () => {
+      const r = parse({
+        op: 't_during',
+        args: [{ property: 'status' }, { interval: ['..', '2024-12-31'] }],
+      })
+      expect(r.sql).toBe('status <= $1')
+      expect(r.params).toEqual(['2024-12-31'])
+    })
+
+    it('t_during with open-ended end', () => {
+      const r = parse({
+        op: 't_during',
+        args: [{ property: 'status' }, { interval: ['2024-01-01', '..'] }],
+      })
+      expect(r.sql).toBe('status >= $1')
+      expect(r.params).toEqual(['2024-01-01'])
+    })
+
+    it('t_disjoint with interval', () => {
+      const r = parse({
+        op: 't_disjoint',
+        args: [{ property: 'status' }, { interval: ['2024-01-01', '2024-12-31'] }],
+      })
+      expect(r.sql).toBe('(status < $1 OR status > $2)')
+      expect(r.params).toEqual(['2024-01-01', '2024-12-31'])
+    })
+
+    it('t_disjoint with open-ended start', () => {
+      const r = parse({
+        op: 't_disjoint',
+        args: [{ property: 'status' }, { interval: ['..', '2024-12-31'] }],
+      })
+      expect(r.sql).toBe('status > $1')
+      expect(r.params).toEqual(['2024-12-31'])
+    })
+
+    it('t_disjoint with open-ended end', () => {
+      const r = parse({
+        op: 't_disjoint',
+        args: [{ property: 'status' }, { interval: ['2024-01-01', '..'] }],
+      })
+      expect(r.sql).toBe('status < $1')
+      expect(r.params).toEqual(['2024-01-01'])
+    })
+  })
+
   describe('error handling', () => {
     it('rejects unknown column', () => {
       expect(() => parse({ op: '=', args: [{ property: 'unknown_col' }, 'x'] })).toThrow(

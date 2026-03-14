@@ -236,6 +236,68 @@ describe('CQL2 Text parser', () => {
     })
   })
 
+  describe('temporal operators', () => {
+    it('T_BEFORE with TIMESTAMP', () => {
+      const r = parse("T_BEFORE(status,TIMESTAMP('2024-01-01T00:00:00Z'))")
+      expect(r.sql).toBe('status < $1')
+      expect(r.params).toEqual(['2024-01-01T00:00:00Z'])
+    })
+
+    it('T_AFTER with DATE', () => {
+      const r = parse("T_AFTER(status,DATE('2024-06-15'))")
+      expect(r.sql).toBe('status > $1')
+      expect(r.params).toEqual(['2024-06-15'])
+    })
+
+    it('T_EQUALS with TIMESTAMP', () => {
+      const r = parse("T_EQUALS(status,TIMESTAMP('2024-01-01T12:00:00Z'))")
+      expect(r.sql).toBe('status = $1')
+      expect(r.params).toEqual(['2024-01-01T12:00:00Z'])
+    })
+
+    it('T_DURING with INTERVAL', () => {
+      const r = parse("T_DURING(status,INTERVAL('2024-01-01','2024-12-31'))")
+      expect(r.sql).toBe('status BETWEEN $1 AND $2')
+      expect(r.params).toEqual(['2024-01-01', '2024-12-31'])
+    })
+
+    it('T_INTERSECTS with INTERVAL', () => {
+      const r = parse("T_INTERSECTS(status,INTERVAL('2024-01-01','2024-12-31'))")
+      expect(r.sql).toBe('status BETWEEN $1 AND $2')
+      expect(r.params).toEqual(['2024-01-01', '2024-12-31'])
+    })
+
+    it('T_DURING with open-ended start', () => {
+      const r = parse("T_DURING(status,INTERVAL('..','2024-12-31'))")
+      expect(r.sql).toBe('status <= $1')
+      expect(r.params).toEqual(['2024-12-31'])
+    })
+
+    it('T_DURING with open-ended end', () => {
+      const r = parse("T_DURING(status,INTERVAL('2024-01-01','..'))")
+      expect(r.sql).toBe('status >= $1')
+      expect(r.params).toEqual(['2024-01-01'])
+    })
+
+    it('T_DISJOINT with INTERVAL', () => {
+      const r = parse("T_DISJOINT(status,INTERVAL('2024-01-01','2024-12-31'))")
+      expect(r.sql).toBe('(status < $1 OR status > $2)')
+      expect(r.params).toEqual(['2024-01-01', '2024-12-31'])
+    })
+
+    it('T_DISJOINT with open-ended start', () => {
+      const r = parse("T_DISJOINT(status,INTERVAL('..','2024-12-31'))")
+      expect(r.sql).toBe('status > $1')
+      expect(r.params).toEqual(['2024-12-31'])
+    })
+
+    it('T_DISJOINT with open-ended end', () => {
+      const r = parse("T_DISJOINT(status,INTERVAL('2024-01-01','..'))")
+      expect(r.sql).toBe('status < $1')
+      expect(r.params).toEqual(['2024-01-01'])
+    })
+  })
+
   describe('complex expressions', () => {
     it('combined filter', () => {
       const r = parse("name='A' AND population>=100 AND status IS NOT NULL")

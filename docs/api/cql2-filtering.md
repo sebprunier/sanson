@@ -90,23 +90,47 @@ S_CONTAINS(geom, POINT(2.35 48.85))
 S_DISJOINT(geom, POLYGON((0 0, 1 0, 1 1, 0 1, 0 0)))
 ```
 
+### Temporal
+
+| Operator       | Description                              |
+| -------------- | ---------------------------------------- |
+| `T_BEFORE`     | Property is before the given instant     |
+| `T_AFTER`      | Property is after the given instant      |
+| `T_EQUALS`     | Property equals the given instant        |
+| `T_DURING`     | Property falls within the given interval |
+| `T_INTERSECTS` | Property intersects the given interval   |
+| `T_DISJOINT`   | Property is outside the given interval   |
+
+Temporal operators use `TIMESTAMP()`, `DATE()`, or `INTERVAL()` literals:
+
+```
+T_BEFORE(updated, TIMESTAMP('2024-01-01T00:00:00Z'))
+T_AFTER(created, DATE('2024-06-15'))
+T_DURING(updated, INTERVAL('2024-01-01','2024-12-31'))
+T_DURING(updated, INTERVAL('2024-01-01','..'))
+T_DISJOINT(updated, INTERVAL('..','2024-06-01'))
+```
+
+Open-ended intervals use `'..'` for unbounded start or end.
+
 ## CQL2 JSON encoding
 
 CQL2 JSON uses a structured `{"op": ..., "args": [...]}` format. Properties are referenced as `{"property": "name"}`.
 
 ### JSON operators
 
-| CQL2 Text equivalent | JSON `op`                               |
-| -------------------- | --------------------------------------- |
-| `=`, `<>`, `<`, etc. | Same (`=`, `<>`, `<`, `<=`, `>`, `>=`)  |
-| `AND`, `OR`          | `and`, `or` (2+ args)                   |
-| `NOT`                | `not` (1 arg)                           |
-| `LIKE`               | `like`                                  |
-| `ILIKE`              | `like` with `casei` wrappers            |
-| `IS NULL`            | `isNull`                                |
-| `IN`                 | `in` (second arg is an array)           |
-| `BETWEEN`            | `between` (3 args)                      |
-| `S_INTERSECTS`, etc. | `s_intersects`, etc. (GeoJSON geometry) |
+| CQL2 Text equivalent | JSON `op`                                          |
+| -------------------- | -------------------------------------------------- |
+| `=`, `<>`, `<`, etc. | Same (`=`, `<>`, `<`, `<=`, `>`, `>=`)             |
+| `AND`, `OR`          | `and`, `or` (2+ args)                              |
+| `NOT`                | `not` (1 arg)                                      |
+| `LIKE`               | `like`                                             |
+| `ILIKE`              | `like` with `casei` wrappers                       |
+| `IS NULL`            | `isNull`                                           |
+| `IN`                 | `in` (second arg is an array)                      |
+| `BETWEEN`            | `between` (3 args)                                 |
+| `S_INTERSECTS`, etc. | `s_intersects`, etc. (GeoJSON geometry)            |
+| `T_BEFORE`, etc.     | `t_before`, etc. (`timestamp`, `date`, `interval`) |
 
 ### JSON examples
 
@@ -153,6 +177,15 @@ CQL2 JSON uses a structured `{"op": ..., "args": [...]}` format. Properties are 
 
 ```json
 { "op": "in", "args": [{ "property": "type" }, ["commune", "arrondissement"]] }
+```
+
+**Temporal filter:**
+
+```json
+{
+  "op": "t_during",
+  "args": [{ "property": "updated" }, { "interval": ["2024-01-01", "2024-12-31"] }]
+}
 ```
 
 ## Examples
