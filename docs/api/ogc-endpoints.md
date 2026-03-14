@@ -191,6 +191,14 @@ If [exposed fields](/api/admin-endpoints#exposed-fields) are configured on the l
 }
 ```
 
+## Style
+
+```
+GET /collections/{collectionId}/style
+```
+
+Returns the style configuration for a collection (see [Layer Style](/api/admin-endpoints#layer-style) for the format). Returns `204 No Content` if no style is configured. External clients can use this endpoint to apply consistent styling.
+
 ## Health check
 
 ```

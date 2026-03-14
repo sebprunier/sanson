@@ -6,6 +6,43 @@ export interface Workspace {
   updated_at: string
 }
 
+export interface CategoryEntry {
+  value: string | number | boolean
+  color: string
+  label?: string
+}
+
+export interface GraduatedClass {
+  min: number
+  max: number
+  color: string
+  label?: string
+}
+
+export interface StyleConfig {
+  type: 'single' | 'categorized' | 'graduated'
+  fill_color?: string
+  fill_opacity?: number
+  stroke_color?: string
+  stroke_width?: number
+  circle_radius?: number
+  field?: string
+  categories?: CategoryEntry[]
+  method?: 'equal_interval' | 'quantile' | 'manual'
+  classes?: GraduatedClass[]
+  default_color?: string
+}
+
+export interface ClassifyResult {
+  type: 'categorized' | 'graduated'
+  field: string
+  categories?: { value: string | number | boolean }[]
+  method?: string
+  classes?: { min: number; max: number }[]
+  min?: number
+  max?: number
+}
+
 export interface Layer {
   id: string
   workspace_id: string
@@ -19,6 +56,7 @@ export interface Layer {
   id_column: string
   datetime_column: string | null
   exposed_fields: Array<{ source: string; alias?: string }> | null
+  style: StyleConfig | null
   srid: number
   bbox: string | null
   feature_count: number | null
@@ -149,6 +187,11 @@ export const api = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       }),
+    classify: (id: string, params: { field: string; type: string; classes?: number }) => {
+      const qs = new URLSearchParams({ field: params.field, type: params.type })
+      if (params.classes) qs.set('classes', String(params.classes))
+      return request<ClassifyResult>(`/api/admin/layers/${id}/classify?${qs}`)
+    },
     delete: (id: string) => request<void>(`/api/admin/layers/${id}`, { method: 'DELETE' }),
     exportUrl: (id: string) => `/api/admin/layers/${id}/export`,
   },

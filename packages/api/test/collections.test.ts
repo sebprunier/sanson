@@ -798,3 +798,77 @@ describe('exposed_fields filtering', () => {
     expect(body.properties).toHaveProperty('secret_code')
   })
 })
+
+describe('GET /collections/:collectionId/style', () => {
+  let container: StartedPostgreSqlContainer
+
+  beforeAll(async () => {
+    container = await new PostgreSqlContainer('postgis/postgis:16-3.4').start()
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+    await db.query(initSql)
+    await db.query(
+      `INSERT INTO sanson_workspaces (id, name) VALUES ('00000000-0000-0000-0000-000000000090', 'stylews')`,
+    )
+    // Layer with a style
+    await db.query(`
+      CREATE TABLE data_styled (id SERIAL PRIMARY KEY, geom GEOMETRY(Point, 4326), name TEXT)
+    `)
+    await db.query(
+      `INSERT INTO sanson_layers (workspace_id, name, table_name, srid, style)
+       VALUES ('00000000-0000-0000-0000-000000000090', 'styled', 'data_styled', 4326,
+               '{"type":"single","fill_color":"#ff0000"}'::jsonb)`,
+    )
+    // Layer without a style
+    await db.query(`
+      CREATE TABLE data_unstyled (id SERIAL PRIMARY KEY, geom GEOMETRY(Point, 4326))
+    `)
+    await db.query(
+      `INSERT INTO sanson_layers (workspace_id, name, table_name, srid)
+       VALUES ('00000000-0000-0000-0000-000000000090', 'unstyled', 'data_unstyled', 4326)`,
+    )
+    await db.end()
+  })
+
+  afterAll(async () => {
+    await container.stop()
+  })
+
+  it('returns style for a styled collection', async () => {
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+    const app = buildApp(db)
+    const response = await app.inject({
+      method: 'GET',
+      url: '/collections/stylews:styled/style',
+    })
+    await app.close()
+
+    expect(response.statusCode).toBe(200)
+    const body = response.json()
+    expect(body.type).toBe('single')
+    expect(body.fill_color).toBe('#ff0000')
+  })
+
+  it('returns 204 for a collection without style', async () => {
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+    const app = buildApp(db)
+    const response = await app.inject({
+      method: 'GET',
+      url: '/collections/stylews:unstyled/style',
+    })
+    await app.close()
+
+    expect(response.statusCode).toBe(204)
+  })
+
+  it('returns 404 for unknown collection', async () => {
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+    const app = buildApp(db)
+    const response = await app.inject({
+      method: 'GET',
+      url: '/collections/unknown:nope/style',
+    })
+    await app.close()
+
+    expect(response.statusCode).toBe(404)
+  })
+})

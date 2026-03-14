@@ -3,7 +3,20 @@ import { useParams, useNavigate } from 'react-router-dom'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { api } from '../services/api'
-import type { Layer, Workspace, ColumnSchema, ImportHistory } from '../services/api'
+import type {
+  Layer,
+  Workspace,
+  ColumnSchema,
+  ImportHistory,
+  StyleConfig,
+  ClassifyResult,
+} from '../services/api'
+import {
+  styleToMaplibrePaint,
+  PALETTES,
+  interpolatePalette,
+  type PaletteName,
+} from '../utils/styleToMaplibre'
 
 interface GeoJsonFeature {
   id: number
@@ -19,7 +32,7 @@ interface ItemsResponse {
   features: GeoJsonFeature[]
 }
 
-type Tab = 'map' | 'table' | 'schema' | 'history' | 'settings'
+type Tab = 'map' | 'table' | 'schema' | 'history' | 'settings' | 'style'
 
 export function LayerDetail() {
   const { id } = useParams<{ id: string }>()
@@ -84,15 +97,24 @@ export function LayerDetail() {
         <TabButton active={tab === 'settings'} onClick={() => setTab('settings')}>
           Settings
         </TabButton>
+        <TabButton active={tab === 'style'} onClick={() => setTab('style')}>
+          Style
+        </TabButton>
       </div>
 
       {tab === 'map' && (
-        <MapView collectionId={collectionId} bbox={layer.bbox} geometryType={layer.geometry_type} />
+        <MapView
+          collectionId={collectionId}
+          bbox={layer.bbox}
+          geometryType={layer.geometry_type}
+          style={layer.style}
+        />
       )}
       {tab === 'table' && <TableView collectionId={collectionId} />}
       {tab === 'schema' && <SchemaView layerId={layer.id} />}
       {tab === 'history' && <HistoryView layerId={layer.id} />}
       {tab === 'settings' && <SettingsView layer={layer} onUpdate={setLayer} />}
+      {tab === 'style' && <StyleView layer={layer} onUpdate={setLayer} />}
     </div>
   )
 }
@@ -124,15 +146,16 @@ function MapView({
   collectionId,
   bbox,
   geometryType,
+  style,
 }: {
   collectionId: string
   bbox: string | null
   geometryType: string | null
+  style?: StyleConfig | null
 }) {
   const mapContainer = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
 
-  // Extract layer name from collectionId (workspace:name → name) for MVT source-layer
   const layerName = collectionId.includes(':') ? collectionId.split(':')[1] : collectionId
 
   useEffect(() => {
@@ -166,47 +189,8 @@ function MapView({
         maxzoom: 14,
       })
 
-      const geomType = geometryType ?? ''
+      applyMapStyle(map, layerName, geometryType, style ?? null)
 
-      if (geomType.includes('Polygon')) {
-        map.addLayer({
-          id: 'features-fill',
-          type: 'fill',
-          source: 'features',
-          'source-layer': layerName,
-          paint: { 'fill-color': '#1B4F72', 'fill-opacity': 0.3 },
-        })
-        map.addLayer({
-          id: 'features-line',
-          type: 'line',
-          source: 'features',
-          'source-layer': layerName,
-          paint: { 'line-color': '#1B4F72', 'line-width': 1.5 },
-        })
-      } else if (geomType.includes('Line')) {
-        map.addLayer({
-          id: 'features-line',
-          type: 'line',
-          source: 'features',
-          'source-layer': layerName,
-          paint: { 'line-color': '#1B4F72', 'line-width': 2 },
-        })
-      } else {
-        map.addLayer({
-          id: 'features-circle',
-          type: 'circle',
-          source: 'features',
-          'source-layer': layerName,
-          paint: {
-            'circle-radius': 6,
-            'circle-color': '#1B4F72',
-            'circle-stroke-color': '#fff',
-            'circle-stroke-width': 2,
-          },
-        })
-      }
-
-      // Fit to bbox
       if (bbox) {
         try {
           const coords = JSON.parse(bbox) as number[]
@@ -224,7 +208,6 @@ function MapView({
         }
       }
 
-      // Popup on click
       map.on('click', (e) => {
         const layerIds = ['features-circle', 'features-fill', 'features-line'].filter((lid) =>
           map.getLayer(lid),
@@ -245,9 +228,134 @@ function MapView({
       map.remove()
       mapRef.current = null
     }
-  }, [collectionId, bbox, geometryType, layerName])
+  }, [collectionId, bbox, geometryType, layerName, style])
 
-  return <div ref={mapContainer} className="w-full h-[600px] rounded-lg border border-gray-200" />
+  return (
+    <div className="relative">
+      <div ref={mapContainer} className="w-full h-[600px] rounded-lg border border-gray-200" />
+      {style && <Legend style={style} geometryType={geometryType} />}
+    </div>
+  )
+}
+
+function applyMapStyle(
+  map: maplibregl.Map,
+  layerName: string,
+  geometryType: string | null,
+  style: StyleConfig | null,
+) {
+  // Remove existing feature layers
+  for (const lid of ['features-circle', 'features-fill', 'features-line']) {
+    if (map.getLayer(lid)) map.removeLayer(lid)
+  }
+
+  const paint = styleToMaplibrePaint(style, geometryType)
+
+  if (paint.fill) {
+    map.addLayer({
+      id: 'features-fill',
+      type: 'fill',
+      source: 'features',
+      'source-layer': layerName,
+      paint: paint.fill as maplibregl.FillLayerSpecification['paint'],
+    })
+  }
+  if (paint.line) {
+    map.addLayer({
+      id: 'features-line',
+      type: 'line',
+      source: 'features',
+      'source-layer': layerName,
+      paint: paint.line as maplibregl.LineLayerSpecification['paint'],
+    })
+  }
+  if (paint.circle) {
+    map.addLayer({
+      id: 'features-circle',
+      type: 'circle',
+      source: 'features',
+      'source-layer': layerName,
+      paint: paint.circle as maplibregl.CircleLayerSpecification['paint'],
+    })
+  }
+}
+
+function Legend({ style, geometryType }: { style: StyleConfig; geometryType: string | null }) {
+  const geom = geometryType ?? ''
+  const isLine = geom.includes('Line')
+  const isPoint = !geom.includes('Polygon') && !isLine
+
+  const renderSymbol = (color: string) => {
+    if (isPoint) {
+      return (
+        <span
+          className="inline-block w-3 h-3 rounded-full border border-gray-300 shrink-0"
+          style={{ backgroundColor: color }}
+        />
+      )
+    }
+    if (isLine) {
+      return (
+        <span
+          className="inline-block w-5 h-0.5 shrink-0 rounded"
+          style={{ backgroundColor: color }}
+        />
+      )
+    }
+    return (
+      <span
+        className="inline-block w-4 h-3 rounded-sm border border-gray-300 shrink-0"
+        style={{ backgroundColor: color, opacity: style.fill_opacity ?? 0.6 }}
+      />
+    )
+  }
+
+  if (style.type === 'single') {
+    return (
+      <div className="absolute bottom-3 left-3 bg-white/90 backdrop-blur rounded-lg shadow px-3 py-2 text-xs flex items-center gap-2">
+        {renderSymbol(style.fill_color ?? '#1B4F72')}
+        <span className="text-gray-700">All features</span>
+      </div>
+    )
+  }
+
+  if (style.type === 'categorized' && style.categories?.length) {
+    return (
+      <div className="absolute bottom-3 left-3 bg-white/90 backdrop-blur rounded-lg shadow px-3 py-2 text-xs max-h-60 overflow-y-auto">
+        <div className="font-medium text-gray-600 mb-1">{style.field}</div>
+        {style.categories.map((cat, i) => (
+          <div key={i} className="flex items-center gap-2 py-0.5">
+            {renderSymbol(cat.color)}
+            <span className="text-gray-700">{cat.label ?? String(cat.value)}</span>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  if (style.type === 'graduated' && style.classes?.length) {
+    return (
+      <div className="absolute bottom-3 left-3 bg-white/90 backdrop-blur rounded-lg shadow px-3 py-2 text-xs max-h-60 overflow-y-auto">
+        <div className="font-medium text-gray-600 mb-1">{style.field}</div>
+        {style.classes.map((cls, i) => (
+          <div key={i} className="flex items-center gap-2 py-0.5">
+            {renderSymbol(cls.color)}
+            <span className="text-gray-700">
+              {cls.label ?? `${formatNum(cls.min)} – ${formatNum(cls.max)}`}
+            </span>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  return null
+}
+
+function formatNum(n: number): string {
+  return Number.isInteger(n)
+    ? n.toLocaleString()
+    : n.toLocaleString(undefined, { maximumFractionDigits: 2 })
 }
 
 function TableView({ collectionId }: { collectionId: string }) {
@@ -665,6 +773,455 @@ function SettingsView({ layer, onUpdate }: { layer: Layer; onUpdate: (l: Layer) 
         {saved && <span className="text-sm text-green-600">Saved successfully</span>}
       </div>
     </form>
+  )
+}
+
+function StyleView({ layer, onUpdate }: { layer: Layer; onUpdate: (l: Layer) => void }) {
+  const [columns, setColumns] = useState<ColumnSchema[]>([])
+  const [styleType, setStyleType] = useState<'single' | 'categorized' | 'graduated'>(
+    layer.style?.type ?? 'single',
+  )
+  const [fillColor, setFillColor] = useState(layer.style?.fill_color ?? '#1B4F72')
+  const [fillOpacity, setFillOpacity] = useState(layer.style?.fill_opacity ?? 0.3)
+  const [strokeWidth] = useState(layer.style?.stroke_width ?? 1.5)
+  const [field, setField] = useState(layer.style?.field ?? '')
+  const [categories, setCategories] = useState(layer.style?.categories ?? [])
+  const [method, setMethod] = useState<'equal_interval' | 'quantile'>(
+    (layer.style?.method as 'equal_interval' | 'quantile') ?? 'quantile',
+  )
+  const [numClasses, setNumClasses] = useState(layer.style?.classes?.length ?? 5)
+  const [classes, setClasses] = useState(layer.style?.classes ?? [])
+  const [palette, setPalette] = useState<PaletteName>('blues')
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState('')
+  const [classifyLoading, setClassifyLoading] = useState(false)
+
+  const [hasStyle, setHasStyle] = useState(layer.style != null)
+
+  // Live preview style — null when no style is active
+  const previewStyle = hasStyle ? buildPreviewStyle() : null
+
+  useEffect(() => {
+    api.layers.schema(layer.id).then((data) => {
+      setColumns(
+        data.columns.filter(
+          (c) => c.column !== layer.geometry_column && c.column !== layer.id_column,
+        ),
+      )
+    })
+  }, [layer.id, layer.geometry_column, layer.id_column])
+
+  const numericColumns = columns.filter((c) =>
+    ['integer', 'bigint', 'smallint', 'double precision', 'real', 'numeric'].includes(c.type),
+  )
+
+  function buildPreviewStyle(): StyleConfig {
+    if (styleType === 'single') {
+      return {
+        type: 'single',
+        fill_color: fillColor,
+        fill_opacity: fillOpacity,
+        stroke_width: strokeWidth,
+      }
+    }
+    if (styleType === 'categorized') {
+      return {
+        type: 'categorized',
+        field,
+        categories,
+        fill_opacity: fillOpacity,
+        stroke_width: strokeWidth,
+        default_color: '#cccccc',
+      }
+    }
+    return {
+      type: 'graduated',
+      field,
+      method,
+      classes,
+      fill_opacity: fillOpacity,
+      stroke_width: strokeWidth,
+      default_color: '#cccccc',
+    }
+  }
+
+  async function handleClassify() {
+    if (!field) return
+    setClassifyLoading(true)
+    setError('')
+    try {
+      const result: ClassifyResult = await api.layers.classify(layer.id, {
+        field,
+        type: styleType,
+        classes: numClasses,
+      })
+
+      if (result.type === 'categorized' && result.categories) {
+        const colors = interpolatePalette(
+          PALETTES[styleType === 'categorized' ? 'qualitative' : palette],
+          result.categories.length,
+        )
+        setCategories(
+          result.categories.map((c, i) => ({
+            value: c.value,
+            color: colors[i] ?? '#cccccc',
+          })),
+        )
+      }
+      if (result.type === 'graduated' && result.classes) {
+        const colors = interpolatePalette(PALETTES[palette], result.classes.length)
+        setClasses(
+          result.classes.map((c, i) => ({
+            min: c.min,
+            max: c.max,
+            color: colors[i] ?? '#cccccc',
+          })),
+        )
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Classification failed')
+    } finally {
+      setClassifyLoading(false)
+    }
+  }
+
+  function applyPalette(name: PaletteName) {
+    setPalette(name)
+    if (styleType === 'categorized' && categories.length > 0) {
+      const colors = interpolatePalette(PALETTES[name], categories.length)
+      setCategories(categories.map((c, i) => ({ ...c, color: colors[i] ?? c.color })))
+    }
+    if (styleType === 'graduated' && classes.length > 0) {
+      const colors = interpolatePalette(PALETTES[name], classes.length)
+      setClasses(classes.map((c, i) => ({ ...c, color: colors[i] ?? c.color })))
+    }
+  }
+
+  async function handleSave() {
+    setSaving(true)
+    setError('')
+    setSaved(false)
+    try {
+      const styleToSave = buildPreviewStyle()
+      const updated = await api.layers.update(layer.id, { style: styleToSave })
+      onUpdate(updated)
+      setHasStyle(true)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleRemove() {
+    setSaving(true)
+    setError('')
+    try {
+      const updated = await api.layers.update(layer.id, { style: null })
+      onUpdate(updated)
+      setHasStyle(false)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Remove failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const collectionId = `${layer.workspace_name}:${layer.name}`
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-5">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Classification type
+          </label>
+          <div className="flex gap-2">
+            {(['single', 'categorized', 'graduated'] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setStyleType(t)}
+                className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+                  styleType === t
+                    ? 'bg-primary-700 text-white border-primary-700'
+                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                {t.charAt(0).toUpperCase() + t.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {styleType === 'single' && (
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">Fill color</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="color"
+                  value={fillColor}
+                  onChange={(e) => setFillColor(e.target.value)}
+                  className="w-10 h-8 rounded border border-gray-300 cursor-pointer"
+                />
+                <span className="text-sm text-gray-500 font-mono">{fillColor}</span>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">
+                Opacity: {fillOpacity.toFixed(2)}
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={fillOpacity}
+                onChange={(e) => setFillOpacity(parseFloat(e.target.value))}
+                className="w-full"
+              />
+            </div>
+          </div>
+        )}
+
+        {(styleType === 'categorized' || styleType === 'graduated') && (
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">Field</label>
+              <select
+                value={field}
+                onChange={(e) => setField(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="">Select a column...</option>
+                {(styleType === 'graduated' ? numericColumns : columns).map((c) => (
+                  <option key={c.column} value={c.column}>
+                    {c.column} ({c.type})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {styleType === 'graduated' && (
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label className="block text-sm text-gray-600 mb-1">Method</label>
+                  <select
+                    value={method}
+                    onChange={(e) => setMethod(e.target.value as 'equal_interval' | 'quantile')}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="quantile">Quantile</option>
+                    <option value="equal_interval">Equal Interval</option>
+                  </select>
+                </div>
+                <div className="w-24">
+                  <label className="block text-sm text-gray-600 mb-1">Classes</label>
+                  <input
+                    type="number"
+                    min={2}
+                    max={20}
+                    value={numClasses}
+                    onChange={(e) => setNumClasses(parseInt(e.target.value) || 5)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">Color palette</label>
+              <div className="flex gap-2 flex-wrap">
+                {(Object.keys(PALETTES) as PaletteName[]).map((name) => (
+                  <button
+                    key={name}
+                    type="button"
+                    onClick={() => applyPalette(name)}
+                    className={`flex rounded overflow-hidden border-2 transition-colors ${
+                      palette === name ? 'border-primary-700' : 'border-transparent'
+                    }`}
+                    title={name}
+                  >
+                    {PALETTES[name].slice(0, 5).map((color, i) => (
+                      <span key={i} className="w-4 h-4" style={{ backgroundColor: color }} />
+                    ))}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">
+                Opacity: {fillOpacity.toFixed(2)}
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={fillOpacity}
+                onChange={(e) => setFillOpacity(parseFloat(e.target.value))}
+                className="w-full"
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={handleClassify}
+              disabled={!field || classifyLoading}
+              className="w-full bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-800 disabled:opacity-50 transition-colors"
+            >
+              {classifyLoading ? 'Classifying...' : 'Auto-classify'}
+            </button>
+
+            {styleType === 'categorized' && categories.length > 0 && (
+              <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr className="border-b border-gray-200">
+                      <th className="text-left px-3 py-2 font-medium text-gray-600 w-12">Color</th>
+                      <th className="text-left px-3 py-2 font-medium text-gray-600">Value</th>
+                      <th className="text-left px-3 py-2 font-medium text-gray-600">Label</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {categories.map((cat, i) => (
+                      <tr key={i} className="border-b border-gray-100 last:border-0">
+                        <td className="px-3 py-1.5">
+                          <input
+                            type="color"
+                            value={cat.color}
+                            onChange={(e) => {
+                              const updated = [...categories]
+                              updated[i] = { ...updated[i], color: e.target.value }
+                              setCategories(updated)
+                            }}
+                            className="w-8 h-6 rounded border border-gray-300 cursor-pointer"
+                          />
+                        </td>
+                        <td className="px-3 py-1.5 text-gray-700 font-mono text-xs">
+                          {String(cat.value)}
+                        </td>
+                        <td className="px-3 py-1.5">
+                          <input
+                            type="text"
+                            value={cat.label ?? ''}
+                            onChange={(e) => {
+                              const updated = [...categories]
+                              updated[i] = {
+                                ...updated[i],
+                                label: e.target.value || undefined,
+                              }
+                              setCategories(updated)
+                            }}
+                            placeholder={String(cat.value)}
+                            className="w-full border border-gray-200 rounded px-2 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary-500"
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {styleType === 'graduated' && classes.length > 0 && (
+              <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr className="border-b border-gray-200">
+                      <th className="text-left px-3 py-2 font-medium text-gray-600 w-12">Color</th>
+                      <th className="text-left px-3 py-2 font-medium text-gray-600">Range</th>
+                      <th className="text-left px-3 py-2 font-medium text-gray-600">Label</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {classes.map((cls, i) => (
+                      <tr key={i} className="border-b border-gray-100 last:border-0">
+                        <td className="px-3 py-1.5">
+                          <input
+                            type="color"
+                            value={cls.color}
+                            onChange={(e) => {
+                              const updated = [...classes]
+                              updated[i] = { ...updated[i], color: e.target.value }
+                              setClasses(updated)
+                            }}
+                            className="w-8 h-6 rounded border border-gray-300 cursor-pointer"
+                          />
+                        </td>
+                        <td className="px-3 py-1.5 text-gray-700 text-xs font-mono">
+                          {formatNum(cls.min)} – {formatNum(cls.max)}
+                        </td>
+                        <td className="px-3 py-1.5">
+                          <input
+                            type="text"
+                            value={cls.label ?? ''}
+                            onChange={(e) => {
+                              const updated = [...classes]
+                              updated[i] = {
+                                ...updated[i],
+                                label: e.target.value || undefined,
+                              }
+                              setClasses(updated)
+                            }}
+                            placeholder={`${formatNum(cls.min)} – ${formatNum(cls.max)}`}
+                            className="w-full border border-gray-200 rounded px-2 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary-500"
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            className="bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-800 disabled:opacity-50 transition-colors"
+          >
+            {saving ? 'Saving...' : 'Save style'}
+          </button>
+          {hasStyle && (
+            <button
+              type="button"
+              onClick={handleRemove}
+              disabled={saving}
+              className="px-4 py-2 text-sm text-red-600 border border-red-300 rounded-lg hover:bg-red-50 disabled:opacity-50 transition-colors"
+            >
+              Remove style
+            </button>
+          )}
+          {saved && <span className="text-sm text-green-600">Saved successfully</span>}
+        </div>
+      </div>
+
+      <div>
+        <MapView
+          collectionId={collectionId}
+          bbox={layer.bbox}
+          geometryType={layer.geometry_type}
+          style={previewStyle}
+        />
+      </div>
+    </div>
   )
 }
 

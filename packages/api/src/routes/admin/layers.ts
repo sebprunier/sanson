@@ -18,6 +18,7 @@ interface LayerRow {
   id_column: string
   datetime_column: string | null
   exposed_fields: ExposedField[] | null
+  style: StyleConfig | null
   srid: number
   bbox: number[] | null
   feature_count: number | null
@@ -42,6 +43,20 @@ interface ExposedField {
   alias?: string
 }
 
+interface StyleConfig {
+  type: 'single' | 'categorized' | 'graduated'
+  fill_color?: string
+  fill_opacity?: number
+  stroke_color?: string
+  stroke_width?: number
+  circle_radius?: number
+  field?: string
+  categories?: { value: string | number | boolean; color: string; label?: string }[]
+  method?: 'equal_interval' | 'quantile' | 'manual'
+  classes?: { min: number; max: number; color: string; label?: string }[]
+  default_color?: string
+}
+
 interface UpdateLayerBody {
   workspace_id?: string
   name?: string
@@ -49,6 +64,7 @@ interface UpdateLayerBody {
   attribution?: string
   datetime_column?: string | null
   exposed_fields?: ExposedField[] | null
+  style?: StyleConfig | null
   geometry_column?: string
   geometry_type?: string
   id_column?: string
@@ -88,6 +104,7 @@ const layerSchema = {
         required: ['source'],
       },
     },
+    style: { type: 'object', nullable: true, additionalProperties: true },
     srid: { type: 'integer' },
     bbox: { type: 'array', nullable: true, items: { type: 'number' } },
     feature_count: { type: 'integer', nullable: true },
@@ -98,7 +115,7 @@ const layerSchema = {
 
 const LAYER_SELECT = `
   SELECT l.id, l.workspace_id, w.name AS workspace_name, l.name, l.description, l.attribution,
-         l.table_name, l.geometry_column, l.geometry_type, l.id_column, l.datetime_column, l.exposed_fields, l.srid,
+         l.table_name, l.geometry_column, l.geometry_type, l.id_column, l.datetime_column, l.exposed_fields, l.style, l.srid,
          l.bbox, l.feature_count, l.created_at, l.updated_at
   FROM sanson_layers l
   JOIN sanson_workspaces w ON w.id = l.workspace_id
@@ -251,6 +268,7 @@ export async function adminLayersRoutes(
               required: ['source'],
             },
           },
+          style: { type: 'object', nullable: true, additionalProperties: true },
           geometry_column: { type: 'string' },
           geometry_type: { type: 'string' },
           id_column: { type: 'string' },
@@ -282,6 +300,9 @@ export async function adminLayersRoutes(
       addField('datetime_column', b.datetime_column)
       if (b.exposed_fields !== undefined) {
         addField('exposed_fields', b.exposed_fields ? JSON.stringify(b.exposed_fields) : null)
+      }
+      if (b.style !== undefined) {
+        addField('style', b.style ? JSON.stringify(b.style) : null)
       }
       addField('geometry_column', b.geometry_column)
       addField('geometry_type', b.geometry_type)
@@ -395,6 +416,115 @@ export async function adminLayersRoutes(
       })
 
       return { total_count: totalCount, columns: result }
+    },
+  })
+
+  // GET /api/admin/layers/:id/classify
+  app.get<{
+    Params: { id: string }
+    Querystring: { field: string; type: 'categorized' | 'graduated'; classes?: string }
+  }>('/api/admin/layers/:id/classify', {
+    schema: {
+      tags: ['Admin'],
+      summary: 'Auto-classify a column for styling',
+      params: {
+        type: 'object',
+        properties: { id: { type: 'string' } },
+        required: ['id'],
+      },
+      querystring: {
+        type: 'object',
+        properties: {
+          field: { type: 'string' },
+          type: { type: 'string', enum: ['categorized', 'graduated'] },
+          classes: { type: 'string' },
+        },
+        required: ['field', 'type'],
+      },
+    },
+    handler: async (request, reply) => {
+      const { rows: layerRows } = await options.db.query<LayerRow>(
+        `${LAYER_SELECT} WHERE l.id = $1`,
+        [request.params.id],
+      )
+      if (layerRows.length === 0) {
+        reply.status(404)
+        return { statusCode: 404, error: 'Not Found', message: 'Layer not found' }
+      }
+      const layer = layerRows[0]
+      const { field, type } = request.query
+
+      // Verify the field exists
+      const { rows: colRows } = await options.db.query<{
+        column_name: string
+        data_type: string
+      }>(
+        `SELECT column_name, data_type FROM information_schema.columns
+         WHERE table_name = $1 AND column_name = $2`,
+        [layer.table_name, field],
+      )
+      if (colRows.length === 0) {
+        reply.status(400)
+        return { statusCode: 400, error: 'Bad Request', message: `Column '${field}' not found` }
+      }
+
+      if (type === 'categorized') {
+        const { rows } = await options.db.query<{ value: unknown }>(
+          `SELECT DISTINCT "${field}" AS value FROM ${layer.table_name}
+           WHERE "${field}" IS NOT NULL ORDER BY "${field}" LIMIT 50`,
+        )
+        return {
+          type: 'categorized',
+          field,
+          categories: rows.map((r) => ({ value: r.value })),
+        }
+      }
+
+      // graduated
+      const numClasses = Math.min(Math.max(parseInt(request.query.classes ?? '5', 10) || 5, 2), 20)
+      const dataType = colRows[0].data_type
+      const numericTypes = ['integer', 'bigint', 'smallint', 'double precision', 'real', 'numeric']
+      if (!numericTypes.includes(dataType)) {
+        reply.status(400)
+        return {
+          statusCode: 400,
+          error: 'Bad Request',
+          message: `Column '${field}' is not numeric (type: ${dataType})`,
+        }
+      }
+
+      const { rows: statsRows } = await options.db.query<{ min: number; max: number }>(
+        `SELECT MIN("${field}")::double precision AS min, MAX("${field}")::double precision AS max
+         FROM ${layer.table_name} WHERE "${field}" IS NOT NULL`,
+      )
+      const { min, max } = statsRows[0]
+
+      // Compute quantile breakpoints
+      const fractions = Array.from({ length: numClasses - 1 }, (_, i) => (i + 1) / numClasses)
+      const { rows: quantileRows } = await options.db.query<{ breakpoints: number[] }>(
+        `SELECT percentile_cont(ARRAY[${fractions.join(',')}])
+           WITHIN GROUP (ORDER BY "${field}"::double precision) AS breakpoints
+         FROM ${layer.table_name} WHERE "${field}" IS NOT NULL`,
+      )
+      const breakpoints = quantileRows[0].breakpoints
+
+      // Build classes
+      const classes = []
+      let prev = min
+      for (let i = 0; i < numClasses; i++) {
+        const next = i < numClasses - 1 ? breakpoints[i] : max
+        classes.push({ min: prev, max: next })
+        prev = next
+      }
+
+      return {
+        type: 'graduated',
+        field,
+        method: 'quantile',
+        classes,
+        min,
+        max,
+      }
     },
   })
 

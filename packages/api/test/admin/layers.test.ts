@@ -158,6 +158,151 @@ describe('Admin layers API', () => {
     expect(response.json().name).toBe('centrales')
   })
 
+  it('PUT /api/admin/layers/:id — saves and returns style', async () => {
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+    const { rows } = await db.query("SELECT id FROM sanson_layers WHERE name = 'centrales'")
+    const app = buildApp(db)
+
+    const style = {
+      type: 'single',
+      fill_color: '#ff0000',
+      fill_opacity: 0.5,
+    }
+
+    const response = await app.inject({
+      method: 'PUT',
+      url: `/api/admin/layers/${rows[0].id}`,
+      payload: { style },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(response.json().style).toEqual(style)
+
+    // Verify it persists on GET
+    const getRes = await app.inject({
+      method: 'GET',
+      url: `/api/admin/layers/${rows[0].id}`,
+    })
+    expect(getRes.json().style).toEqual(style)
+
+    await app.close()
+  })
+
+  it('PUT /api/admin/layers/:id — clears style with null', async () => {
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+    const { rows } = await db.query("SELECT id FROM sanson_layers WHERE name = 'centrales'")
+    const app = buildApp(db)
+
+    const response = await app.inject({
+      method: 'PUT',
+      url: `/api/admin/layers/${rows[0].id}`,
+      payload: { style: null },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(response.json().style).toBeNull()
+
+    await app.close()
+  })
+
+  describe('classify endpoint', () => {
+    let layerId: string
+
+    beforeAll(async () => {
+      const db = new Pool({ connectionString: container.getConnectionUri() })
+      // Create a data table with some test data
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS energie_cities (
+          id SERIAL PRIMARY KEY,
+          geom GEOMETRY(Point, 4326),
+          name TEXT,
+          population INTEGER,
+          category TEXT
+        )
+      `)
+      await db.query(`
+        INSERT INTO energie_cities (geom, name, population, category) VALUES
+          (ST_SetSRID(ST_MakePoint(2.35, 48.85), 4326), 'Paris', 2161000, 'capital'),
+          (ST_SetSRID(ST_MakePoint(4.83, 45.76), 4326), 'Lyon', 516092, 'major'),
+          (ST_SetSRID(ST_MakePoint(5.37, 43.30), 4326), 'Marseille', 870018, 'major'),
+          (ST_SetSRID(ST_MakePoint(1.44, 43.60), 4326), 'Toulouse', 493465, 'major'),
+          (ST_SetSRID(ST_MakePoint(-1.55, 47.22), 4326), 'Nantes', 314138, 'medium')
+      `)
+      // Register as a layer
+      const { rows } = await db.query(
+        `INSERT INTO sanson_layers (workspace_id, name, table_name, geometry_column, id_column, srid)
+         VALUES ($1, 'cities', 'energie_cities', 'geom', 'id', 4326) RETURNING id`,
+        [workspaceId],
+      )
+      layerId = rows[0].id
+      await db.end()
+    })
+
+    it('GET /api/admin/layers/:id/classify — categorized', async () => {
+      const db = new Pool({ connectionString: container.getConnectionUri() })
+      const app = buildApp(db)
+      const response = await app.inject({
+        method: 'GET',
+        url: `/api/admin/layers/${layerId}/classify?field=category&type=categorized`,
+      })
+      await app.close()
+
+      expect(response.statusCode).toBe(200)
+      const body = response.json()
+      expect(body.type).toBe('categorized')
+      expect(body.field).toBe('category')
+      expect(body.categories).toHaveLength(3) // capital, major, medium
+      expect(body.categories.map((c: { value: string }) => c.value).sort()).toEqual([
+        'capital',
+        'major',
+        'medium',
+      ])
+    })
+
+    it('GET /api/admin/layers/:id/classify — graduated (quantile)', async () => {
+      const db = new Pool({ connectionString: container.getConnectionUri() })
+      const app = buildApp(db)
+      const response = await app.inject({
+        method: 'GET',
+        url: `/api/admin/layers/${layerId}/classify?field=population&type=graduated&classes=3`,
+      })
+      await app.close()
+
+      expect(response.statusCode).toBe(200)
+      const body = response.json()
+      expect(body.type).toBe('graduated')
+      expect(body.field).toBe('population')
+      expect(body.method).toBe('quantile')
+      expect(body.classes).toHaveLength(3)
+      expect(body.classes[0].min).toBeDefined()
+      expect(body.classes[2].max).toBeDefined()
+    })
+
+    it('GET /api/admin/layers/:id/classify — rejects non-numeric for graduated', async () => {
+      const db = new Pool({ connectionString: container.getConnectionUri() })
+      const app = buildApp(db)
+      const response = await app.inject({
+        method: 'GET',
+        url: `/api/admin/layers/${layerId}/classify?field=name&type=graduated`,
+      })
+      await app.close()
+
+      expect(response.statusCode).toBe(400)
+      expect(response.json().message).toContain('not numeric')
+    })
+
+    it('GET /api/admin/layers/:id/classify — rejects unknown field', async () => {
+      const db = new Pool({ connectionString: container.getConnectionUri() })
+      const app = buildApp(db)
+      const response = await app.inject({
+        method: 'GET',
+        url: `/api/admin/layers/${layerId}/classify?field=nonexistent&type=categorized`,
+      })
+      await app.close()
+
+      expect(response.statusCode).toBe(400)
+      expect(response.json().message).toContain('not found')
+    })
+  })
+
   it('DELETE /api/admin/layers/:id — deletes a layer', async () => {
     const db = new Pool({ connectionString: container.getConnectionUri() })
     const { rows } = await db.query("SELECT id FROM sanson_layers WHERE name = 'centrales'")

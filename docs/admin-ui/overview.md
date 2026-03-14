@@ -42,6 +42,14 @@ The layer detail page has four tabs:
 - **Datetime column** — select which column to use for OGC `?datetime=` temporal filtering
 - **Exposed fields** — choose which columns are visible in the OGC API, with optional aliases. See [Exposed Fields](/api/admin-endpoints#exposed-fields).
 
+**Style view** — configure how the layer is rendered on the map:
+
+- **Single** — one color for all features, with color picker and opacity slider
+- **Categorized** — map unique values of a column to colors (auto-classify from data)
+- **Graduated** — map numeric ranges to a color ramp (quantile breakpoints, configurable number of classes)
+- Color palette selector, per-entry color override, optional labels
+- Live map preview alongside the editor
+
 A **Download GeoJSON** button in the layer header exports the full dataset as a GeoJSON file.
 
 ### Import history

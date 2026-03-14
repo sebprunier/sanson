@@ -721,6 +721,44 @@ export async function collectionsRoutes(
     },
   })
 
+  // GET /collections/:collectionId/style
+  app.get<{ Params: { collectionId: string } }>('/collections/:collectionId/style', {
+    schema: {
+      tags: ['OGC'],
+      summary: 'Collection style',
+      description: 'Returns the style configuration for a collection',
+      params: {
+        type: 'object',
+        properties: {
+          collectionId: {
+            type: 'string',
+            description: 'Collection identifier (workspaceId:layerName)',
+          },
+        },
+        required: ['collectionId'],
+      },
+    },
+    handler: async (request, reply) => {
+      const parsed = parseCollectionId(request.params.collectionId)
+      if (!parsed) return sendNotFound(reply)
+
+      const { rows } = await options.db.query<{ style: object | null }>(
+        `SELECT l.style
+         FROM sanson_layers l
+         JOIN sanson_workspaces w ON w.id = l.workspace_id
+         WHERE w.name = $1 AND l.name = $2`,
+        [parsed.workspaceName, parsed.layerName],
+      )
+
+      if (rows.length === 0) return sendNotFound(reply)
+      if (!rows[0].style) {
+        reply.status(204)
+        return
+      }
+      return rows[0].style
+    },
+  })
+
   // GET /collections/:collectionId/tiles/:z/:x/:y.pbf
   app.get<{
     Params: { collectionId: string; z: string; x: string; y: string }

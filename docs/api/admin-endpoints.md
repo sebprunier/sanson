@@ -259,3 +259,79 @@ Exposed fields filtering applies to:
 - **Queryables** (`/collections/{id}/queryables`) — only exposed columns are listed as filterable
 - **Vector tiles** (`/collections/{id}/tiles/{z}/{x}/{y}.pbf`) — MVT properties reflect exposed fields
 - **Export** (`/api/admin/layers/{id}/export`) — GeoJSON export respects the configuration
+
+## Layer Style
+
+Layers can have a style configuration that defines how features should be rendered. The style is stored as JSONB and supports three classification types.
+
+### Style types
+
+**Single** — one color for all features:
+
+```json
+{
+  "type": "single",
+  "fill_color": "#1B4F72",
+  "fill_opacity": 0.3,
+  "stroke_color": "#1B4F72",
+  "stroke_width": 1.5
+}
+```
+
+**Categorized** — unique values mapped to colors:
+
+```json
+{
+  "type": "categorized",
+  "field": "category",
+  "categories": [
+    { "value": "capital", "color": "#e41a1c", "label": "Capital" },
+    { "value": "major", "color": "#377eb8", "label": "Major city" }
+  ],
+  "default_color": "#cccccc",
+  "fill_opacity": 0.5
+}
+```
+
+**Graduated** — numeric ranges mapped to colors:
+
+```json
+{
+  "type": "graduated",
+  "field": "population",
+  "method": "quantile",
+  "classes": [
+    { "min": 0, "max": 100000, "color": "#eff3ff" },
+    { "min": 100000, "max": 500000, "color": "#6baed6" },
+    { "min": 500000, "max": 2200000, "color": "#08519c" }
+  ],
+  "default_color": "#cccccc",
+  "fill_opacity": 0.5
+}
+```
+
+Save a style via the [Update a layer](#update-a-layer) endpoint (`PUT /api/admin/layers/{id}` with a `style` field). Set `style` to `null` to remove it.
+
+### Auto-classify
+
+```
+GET /api/admin/layers/{id}/classify
+```
+
+Generates classification suggestions from the actual data.
+
+| Parameter | Type   | Required | Description                                  |
+| --------- | ------ | -------- | -------------------------------------------- |
+| `field`   | string | Yes      | Column name to classify                      |
+| `type`    | string | Yes      | `categorized` or `graduated`                 |
+| `classes` | number | No       | Number of classes for graduated (default: 5) |
+
+For `categorized`, returns up to 50 distinct values. For `graduated`, computes quantile breakpoints.
+
+### OGC style endpoint
+
+```
+GET /collections/{collectionId}/style
+```
+
+Returns the style configuration for a collection. Returns `204 No Content` if no style is configured.
