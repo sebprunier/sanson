@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify'
 import { Pool } from 'pg'
 import { writeFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
+import { gunzipSync } from 'zlib'
 import PgBoss from 'pg-boss'
 import { QUEUE_INGEST, IngestJobPayload } from '@sanson/worker'
 
@@ -55,6 +56,22 @@ export async function adminImportRoutes(
           statusCode: 400,
           error: 'Bad Request',
           message: 'Missing required fields: workspace_id, layer_name, file',
+        }
+      }
+
+      // Decompress gzip if needed
+      const isGzip =
+        sourceFileName?.endsWith('.gz') || (fileBuffer[0] === 0x1f && fileBuffer[1] === 0x8b)
+      if (isGzip) {
+        try {
+          fileBuffer = gunzipSync(fileBuffer)
+        } catch {
+          reply.status(400)
+          return {
+            statusCode: 400,
+            error: 'Bad Request',
+            message: 'Failed to decompress gzip file',
+          }
         }
       }
 

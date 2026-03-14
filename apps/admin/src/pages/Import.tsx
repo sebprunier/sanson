@@ -226,7 +226,7 @@ export function Import() {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".geojson,.json"
+            accept=".geojson,.json,.geojson.gz,.gz"
             onChange={handleFileChange}
             required
             className="w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
