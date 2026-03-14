@@ -40,17 +40,23 @@ INSERT INTO sanson_workspaces (name, description)
 VALUES ('default', 'Default workspace')
 ON CONFLICT DO NOTHING;
 
--- Import history
+-- Import history (also serves as job tracking table)
 CREATE TABLE IF NOT EXISTS sanson_import_history (
-    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    layer_id      UUID REFERENCES sanson_layers(id),
-    job_id        UUID,
-    source_file   VARCHAR(500),
-    source_srid   INTEGER,
-    target_srid   INTEGER,
-    feature_count BIGINT,
-    status        VARCHAR(20),
-    error         TEXT,
-    duration_ms   INTEGER,
-    created_at    TIMESTAMPTZ DEFAULT now()
+    id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    layer_id           UUID REFERENCES sanson_layers(id),
+    job_id             UUID,
+    source_file        VARCHAR(500),
+    source_srid        INTEGER,
+    target_srid        INTEGER,
+    feature_count      BIGINT,
+    total_features     BIGINT,
+    imported_features  BIGINT DEFAULT 0,
+    progress           SMALLINT DEFAULT 0,
+    status             VARCHAR(20) DEFAULT 'pending',
+    error              TEXT,
+    logs               JSONB DEFAULT '[]'::jsonb,
+    duration_ms        INTEGER,
+    created_at         TIMESTAMPTZ DEFAULT now(),
+    started_at         TIMESTAMPTZ,
+    completed_at       TIMESTAMPTZ
 );

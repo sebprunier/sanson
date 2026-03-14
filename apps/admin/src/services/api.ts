@@ -52,20 +52,42 @@ export interface ImportHistory {
   source_srid: number
   target_srid: number
   feature_count: number
-  status: string
+  total_features: number | null
+  imported_features: number
+  progress: number
+  status: 'pending' | 'running' | 'completed' | 'failed'
   error: string | null
   duration_ms: number | null
   created_at: string
+  started_at: string | null
+  completed_at: string | null
 }
 
-export interface ImportResult {
-  layer_id: string
-  collection_id: string
-  table_name: string
-  feature_count: number
-  geometry_type: string
-  bbox: number[] | null
-  srid: number
+export interface ImportAccepted {
+  import_id: string
+  status: string
+  message: string
+}
+
+export interface JobStatus {
+  id: string
+  job_id: string | null
+  layer_id: string | null
+  layer_name: string | null
+  source_file: string
+  source_srid: number
+  target_srid: number
+  feature_count: number | null
+  total_features: number | null
+  imported_features: number
+  progress: number
+  status: 'pending' | 'running' | 'completed' | 'failed'
+  error: string | null
+  logs: Array<{ ts: string; level: string; message: string }>
+  duration_ms: number | null
+  created_at: string
+  started_at: string | null
+  completed_at: string | null
 }
 
 const BASE = ''
@@ -77,6 +99,15 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
     throw new Error(body?.message ?? `HTTP ${res.status}`)
   }
   if (res.status === 204) return undefined as T
+  return res.json()
+}
+
+async function requestAccepted<T>(url: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(`${BASE}${url}`, options)
+  if (!res.ok && res.status !== 202) {
+    const body = await res.json().catch(() => null)
+    throw new Error(body?.message ?? `HTTP ${res.status}`)
+  }
   return res.json()
 }
 
@@ -118,9 +149,22 @@ export const api = {
     form.append('layer_name', data.layer_name)
     if (data.srid) form.append('srid', String(data.srid))
     form.append('file', data.file)
-    return request<ImportResult>('/api/admin/import', {
+    return requestAccepted<ImportAccepted>('/api/admin/import', {
       method: 'POST',
       body: form,
     })
+  },
+
+  jobs: {
+    list: (params?: { status?: string; layer_id?: string; limit?: number; offset?: number }) => {
+      const qs = new URLSearchParams()
+      if (params?.status) qs.set('status', params.status)
+      if (params?.layer_id) qs.set('layer_id', params.layer_id)
+      if (params?.limit) qs.set('limit', String(params.limit))
+      if (params?.offset) qs.set('offset', String(params.offset))
+      const query = qs.toString()
+      return request<JobStatus[]>(`/api/admin/jobs${query ? `?${query}` : ''}`)
+    },
+    get: (id: string) => request<JobStatus>(`/api/admin/jobs/${id}`),
   },
 }

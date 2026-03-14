@@ -1,6 +1,7 @@
 import Fastify, { FastifyInstance } from 'fastify'
 import fastifySwagger from '@fastify/swagger'
 import { Pool } from 'pg'
+import PgBoss from 'pg-boss'
 import { rootRoutes } from './routes/root'
 import { conformanceRoutes } from './routes/conformance'
 import { collectionsRoutes } from './routes/collections'
@@ -9,10 +10,12 @@ import multipart from '@fastify/multipart'
 import { adminWorkspacesRoutes } from './routes/admin/workspaces'
 import { adminLayersRoutes } from './routes/admin/layers'
 import { adminImportRoutes } from './routes/admin/import'
+import { adminJobsRoutes } from './routes/admin/jobs'
 import { healthRoutes } from './routes/health'
 
 interface AppOptions {
   logger?: boolean
+  boss?: PgBoss
 }
 
 export function buildApp(db: Pool, options: AppOptions = {}): FastifyInstance {
@@ -43,7 +46,8 @@ export function buildApp(db: Pool, options: AppOptions = {}): FastifyInstance {
   app.register(collectionsRoutes, { db })
   app.register(adminWorkspacesRoutes, { db })
   app.register(adminLayersRoutes, { db })
-  app.register(adminImportRoutes, { db })
+  app.register(adminImportRoutes, { db, boss: options.boss })
+  app.register(adminJobsRoutes, { db })
   app.register(apiRoutes)
   app.register(healthRoutes, { db })
 

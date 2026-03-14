@@ -359,7 +359,9 @@ export async function adminLayersRoutes(
       }
 
       const { rows } = await options.db.query(
-        `SELECT id, source_file, source_srid, target_srid, feature_count, status, error, duration_ms, created_at
+        `SELECT id, source_file, source_srid, target_srid, feature_count,
+                total_features, imported_features, progress,
+                status, error, duration_ms, created_at, started_at, completed_at
          FROM sanson_import_history
          WHERE layer_id = $1
          ORDER BY created_at DESC`,

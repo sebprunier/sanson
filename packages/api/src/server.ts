@@ -1,5 +1,6 @@
 import { Pool } from 'pg'
 import { buildApp } from './app'
+import { createBoss, startWorker, ensureQueues } from '@sanson/worker'
 
 const connectionString = process.env.DATABASE_URL
 if (!connectionString) {
@@ -8,11 +9,19 @@ if (!connectionString) {
 }
 
 const port = parseInt(process.env.PORT ?? '3000', 10)
+const nodeMode = process.env.NODE_MODE ?? 'all'
+
+if (!['api', 'worker', 'all'].includes(nodeMode)) {
+  console.error(`Invalid NODE_MODE: ${nodeMode}. Must be 'api', 'worker', or 'all'.`)
+  process.exit(1)
+}
+
 const db = new Pool({ connectionString })
-const app = buildApp(db, { logger: true })
+const boss = createBoss(connectionString)
 
 const shutdown = async () => {
-  await app.close()
+  await boss.stop({ graceful: true })
+  await db.end()
   process.exit(0)
 }
 
@@ -20,8 +29,27 @@ process.on('SIGINT', shutdown)
 process.on('SIGTERM', shutdown)
 
 try {
-  await app.listen({ port, host: '0.0.0.0' })
+  await boss.start()
+  await ensureQueues(boss)
+  console.log(`pg-boss started (schema: pgboss)`)
+
+  if (nodeMode === 'api' || nodeMode === 'all') {
+    const app = buildApp(db, { logger: true, boss })
+    app.addHook('onClose', async () => {
+      await boss.stop({ graceful: true })
+    })
+    await app.listen({ port, host: '0.0.0.0' })
+  }
+
+  if (nodeMode === 'worker' || nodeMode === 'all') {
+    await startWorker(boss, db)
+    console.log(`Worker started, listening on queue: sanson-ingest`)
+  }
+
+  if (nodeMode === 'worker') {
+    console.log('Running in worker-only mode (no HTTP server)')
+  }
 } catch (err) {
-  app.log.error(err)
+  console.error(err)
   process.exit(1)
 }

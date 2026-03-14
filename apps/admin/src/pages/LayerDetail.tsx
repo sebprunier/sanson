@@ -439,10 +439,24 @@ function HistoryView({ layerId }: { layerId: string }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    api.layers
-      .history(layerId)
-      .then(setHistory)
-      .finally(() => setLoading(false))
+    let cancelled = false
+
+    const load = async () => {
+      const data = await api.layers.history(layerId)
+      if (cancelled) return
+      setHistory(data)
+      setLoading(false)
+
+      // Auto-refresh if any import is in progress
+      if (data.some((h) => h.status === 'pending' || h.status === 'running')) {
+        setTimeout(load, 2000)
+      }
+    }
+
+    load()
+    return () => {
+      cancelled = true
+    }
   }, [layerId])
 
   if (loading) return <div className="animate-pulse h-48 bg-gray-200 rounded-lg" />
@@ -460,6 +474,7 @@ function HistoryView({ layerId }: { layerId: string }) {
             <tr className="border-b border-gray-200">
               <th className="text-left px-3 py-2 font-medium text-gray-600">Date</th>
               <th className="text-left px-3 py-2 font-medium text-gray-600">Source</th>
+              <th className="text-left px-3 py-2 font-medium text-gray-600">Progress</th>
               <th className="text-left px-3 py-2 font-medium text-gray-600">Features</th>
               <th className="text-left px-3 py-2 font-medium text-gray-600">SRID</th>
               <th className="text-left px-3 py-2 font-medium text-gray-600">Duration</th>
@@ -473,8 +488,24 @@ function HistoryView({ layerId }: { layerId: string }) {
                   {new Date(h.created_at).toLocaleString()}
                 </td>
                 <td className="px-3 py-2 text-gray-700">{h.source_file}</td>
+                <td className="px-3 py-2 w-32">
+                  {h.status === 'running' || h.status === 'pending' ? (
+                    <div className="w-full bg-gray-200 rounded-full h-1.5">
+                      <div
+                        className="bg-primary-600 h-1.5 rounded-full transition-all"
+                        style={{ width: `${h.progress}%` }}
+                      />
+                    </div>
+                  ) : h.status === 'completed' ? (
+                    <span className="text-gray-500">100%</span>
+                  ) : (
+                    '—'
+                  )}
+                </td>
                 <td className="px-3 py-2 text-gray-700">
-                  {h.feature_count?.toLocaleString() ?? '—'}
+                  {h.status === 'running'
+                    ? `${h.imported_features?.toLocaleString() ?? 0} / ${h.total_features?.toLocaleString() ?? '?'}`
+                    : (h.feature_count?.toLocaleString() ?? '—')}
                 </td>
                 <td className="px-3 py-2 text-gray-500">
                   {h.source_srid === h.target_srid
@@ -491,7 +522,9 @@ function HistoryView({ layerId }: { layerId: string }) {
                         ? 'bg-green-100 text-green-700'
                         : h.status === 'failed'
                           ? 'bg-red-100 text-red-700'
-                          : 'bg-yellow-100 text-yellow-700'
+                          : h.status === 'running'
+                            ? 'bg-blue-100 text-blue-700'
+                            : 'bg-yellow-100 text-yellow-700'
                     }`}
                   >
                     {h.status}
