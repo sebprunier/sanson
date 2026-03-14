@@ -12,6 +12,7 @@ import { adminLayersRoutes } from './routes/admin/layers'
 import { adminImportRoutes } from './routes/admin/import'
 import { adminJobsRoutes } from './routes/admin/jobs'
 import { healthRoutes } from './routes/health'
+import { tileMatrixSetsRoutes } from './routes/tileMatrixSets'
 
 interface AppOptions {
   logger?: boolean
@@ -43,6 +44,7 @@ export function buildApp(db: Pool, options: AppOptions = {}): FastifyInstance {
 
   app.register(rootRoutes)
   app.register(conformanceRoutes)
+  app.register(tileMatrixSetsRoutes)
   app.register(collectionsRoutes, { db })
   app.register(adminWorkspacesRoutes, { db })
   app.register(adminLayersRoutes, { db })

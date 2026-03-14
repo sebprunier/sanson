@@ -15,6 +15,9 @@ const conformsTo = [
   'http://www.opengis.net/spec/cql2/1.0/req/basic-cql2',
   'http://www.opengis.net/spec/cql2/1.0/req/basic-spatial-operators',
   'http://www.opengis.net/spec/cql2/1.0/req/advanced-comparison-operators',
+  'http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/core',
+  'http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tileset',
+  'http://www.opengis.net/spec/tms/2.0/conf/tilematrixset',
 ]
 
 export async function conformanceRoutes(app: FastifyInstance): Promise<void> {

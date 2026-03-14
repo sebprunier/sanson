@@ -28,7 +28,7 @@ describe('GET /', () => {
 
     expect(body.title).toBe('Sanson')
     expect(body.description).toBeDefined()
-    expect(body.links).toHaveLength(4)
+    expect(body.links).toHaveLength(5)
   })
 
   it('includes required OGC links', async () => {
@@ -40,5 +40,6 @@ describe('GET /', () => {
     expect(rels).toContain('conformance')
     expect(rels).toContain('data')
     expect(rels).toContain('service-desc')
+    expect(rels).toContain('tiling-schemes')
   })
 })

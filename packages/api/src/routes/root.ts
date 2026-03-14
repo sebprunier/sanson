@@ -69,6 +69,12 @@ export async function rootRoutes(app: FastifyInstance): Promise<void> {
             type: 'application/vnd.oai.openapi+json;version=3.0',
             title: 'API definition',
           },
+          {
+            href: '/tileMatrixSets',
+            rel: 'tiling-schemes',
+            type: 'application/json',
+            title: 'Tile matrix sets',
+          },
         ],
       }
     },

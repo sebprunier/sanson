@@ -13,6 +13,28 @@ Returns a binary protobuf tile in `application/vnd.mapbox-vector-tile` format.
 - **Empty tiles** return `204 No Content`
 - **Caching**: `Cache-Control: public, max-age=3600` (1 hour)
 
+## Tileset metadata
+
+```
+GET /collections/{collectionId}/tiles
+```
+
+Returns OGC-compliant tileset metadata for a collection, including the tile matrix set, bounding box, and templated tile URLs.
+
+## Tile matrix sets
+
+```
+GET /tileMatrixSets
+```
+
+Lists available tile matrix sets. Sanson supports `WebMercatorQuad` (EPSG:3857).
+
+```
+GET /tileMatrixSets/WebMercatorQuad
+```
+
+Returns the full `WebMercatorQuad` definition with all zoom levels (0–24), scale denominators, and matrix dimensions.
+
 ## Compatible clients
 
 - [MapLibre GL JS](https://maplibre.org)

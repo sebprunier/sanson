@@ -151,6 +151,11 @@ function buildCollection(row: LayerRow): OgcCollection {
         rel: 'queryables',
         type: 'application/schema+json',
       },
+      {
+        href: `/collections/${collectionId}/tiles`,
+        rel: 'tiles',
+        type: 'application/json',
+      },
     ],
   }
 }
@@ -717,6 +722,95 @@ export async function collectionsRoutes(
           },
           ...properties,
         },
+      }
+    },
+  })
+
+  // GET /collections/:collectionId/tiles
+  app.get<{ Params: { collectionId: string } }>('/collections/:collectionId/tiles', {
+    schema: {
+      tags: ['OGC'],
+      summary: 'Tileset metadata',
+      description: 'Returns tileset metadata for a collection',
+      params: {
+        type: 'object',
+        properties: {
+          collectionId: {
+            type: 'string',
+            description: 'Collection identifier (workspaceId:layerName)',
+          },
+        },
+        required: ['collectionId'],
+      },
+    },
+    handler: async (request, reply) => {
+      const parsed = parseCollectionId(request.params.collectionId)
+      if (!parsed) return sendNotFound(reply)
+
+      const { rows } = await options.db.query<{
+        workspace_name: string
+        name: string
+        description: string | null
+        bbox: number[] | null
+        geometry_type: string | null
+      }>(
+        `SELECT w.name AS workspace_name, l.name, l.description, l.bbox, l.geometry_type
+         FROM sanson_layers l
+         JOIN sanson_workspaces w ON w.id = l.workspace_id
+         WHERE w.name = $1 AND l.name = $2`,
+        [parsed.workspaceName, parsed.layerName],
+      )
+
+      if (rows.length === 0) return sendNotFound(reply)
+
+      const layer = rows[0]
+      const collectionId = `${layer.workspace_name}:${layer.name}`
+
+      return {
+        title: layer.name,
+        description: layer.description,
+        dataType: 'vector',
+        crs: 'http://www.opengis.net/def/crs/EPSG/0/3857',
+        tileMatrixSetId: 'WebMercatorQuad',
+        links: [
+          {
+            href: `/collections/${collectionId}/tiles`,
+            rel: 'self',
+            type: 'application/json',
+          },
+          {
+            href: `/collections/${collectionId}/tiles/WebMercatorQuad/{z}/{x}/{y}.pbf`,
+            rel: 'item',
+            type: 'application/vnd.mapbox-vector-tile',
+            templated: true,
+          },
+          {
+            href: `/collections/${collectionId}/tiles/{z}/{x}/{y}.pbf`,
+            rel: 'item',
+            type: 'application/vnd.mapbox-vector-tile',
+            templated: true,
+            title: 'Shorthand tile URL',
+          },
+          {
+            href: '/tileMatrixSets/WebMercatorQuad',
+            rel: 'tiling-scheme',
+            type: 'application/json',
+          },
+          {
+            href: `/collections/${collectionId}`,
+            rel: 'collection',
+            type: 'application/json',
+          },
+        ],
+        ...(layer.bbox
+          ? {
+              boundingBox: {
+                lowerLeft: [layer.bbox[0], layer.bbox[1]],
+                upperRight: [layer.bbox[2], layer.bbox[3]],
+                crs: 'http://www.opengis.net/def/crs/OGC/1.3/CRS84',
+              },
+            }
+          : {}),
       }
     },
   })

@@ -47,6 +47,9 @@ Declares the OGC conformance classes supported by Sanson:
 | CQL2 Basic               | Implemented |
 | CQL2 Basic Spatial       | Implemented |
 | CQL2 Advanced Comparison | Implemented |
+| Tiles Core               | Implemented |
+| Tileset                  | Implemented |
+| Tile Matrix Set          | Implemented |
 | CQL2 JSON                | Planned     |
 | CQL2 Temporal            | Planned     |
 | CRS by Reference         | Planned     |
