@@ -12,10 +12,12 @@ export interface Layer {
   workspace_name: string
   name: string
   description: string | null
+  attribution: string | null
   table_name: string
   geometry_column: string
   geometry_type: string | null
   id_column: string
+  datetime_column: string | null
   srid: number
   bbox: string | null
   feature_count: number | null
@@ -140,6 +142,12 @@ export const api = {
     get: (id: string) => request<Layer>(`/api/admin/layers/${id}`),
     schema: (id: string) => request<LayerSchema>(`/api/admin/layers/${id}/schema`),
     history: (id: string) => request<ImportHistory[]>(`/api/admin/layers/${id}/history`),
+    update: (id: string, data: Record<string, unknown>) =>
+      request<Layer>(`/api/admin/layers/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      }),
     delete: (id: string) => request<void>(`/api/admin/layers/${id}`, { method: 'DELETE' }),
     exportUrl: (id: string) => `/api/admin/layers/${id}/export`,
   },

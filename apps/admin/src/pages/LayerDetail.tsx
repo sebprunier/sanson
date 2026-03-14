@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { api } from '../services/api'
-import type { Layer, ColumnSchema, ImportHistory } from '../services/api'
+import type { Layer, Workspace, ColumnSchema, ImportHistory } from '../services/api'
 
 interface GeoJsonFeature {
   id: number
@@ -19,7 +19,7 @@ interface ItemsResponse {
   features: GeoJsonFeature[]
 }
 
-type Tab = 'map' | 'table' | 'schema' | 'history'
+type Tab = 'map' | 'table' | 'schema' | 'history' | 'settings'
 
 export function LayerDetail() {
   const { id } = useParams<{ id: string }>()
@@ -81,6 +81,9 @@ export function LayerDetail() {
         <TabButton active={tab === 'history'} onClick={() => setTab('history')}>
           History
         </TabButton>
+        <TabButton active={tab === 'settings'} onClick={() => setTab('settings')}>
+          Settings
+        </TabButton>
       </div>
 
       {tab === 'map' && (
@@ -89,6 +92,7 @@ export function LayerDetail() {
       {tab === 'table' && <TableView collectionId={collectionId} />}
       {tab === 'schema' && <SchemaView layerId={layer.id} />}
       {tab === 'history' && <HistoryView layerId={layer.id} />}
+      {tab === 'settings' && <SettingsView layer={layer} onUpdate={setLayer} />}
     </div>
   )
 }
@@ -439,6 +443,134 @@ function SchemaView({ layerId }: { layerId: string }) {
         </table>
       </div>
     </div>
+  )
+}
+
+function SettingsView({ layer, onUpdate }: { layer: Layer; onUpdate: (l: Layer) => void }) {
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([])
+  const [columns, setColumns] = useState<ColumnSchema[]>([])
+  const [workspaceId, setWorkspaceId] = useState(layer.workspace_id)
+  const [description, setDescription] = useState(layer.description ?? '')
+  const [attribution, setAttribution] = useState(layer.attribution ?? '')
+  const [datetimeColumn, setDatetimeColumn] = useState(layer.datetime_column ?? '')
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    api.workspaces.list().then(setWorkspaces)
+    api.layers.schema(layer.id).then((data) => setColumns(data.columns))
+  }, [layer.id])
+
+  // Columns suitable for datetime filtering (timestamp, date, text types)
+  const dateColumns = columns.filter(
+    (c) =>
+      c.type.includes('timestamp') ||
+      c.type === 'date' ||
+      c.type === 'text' ||
+      c.type === 'character varying',
+  )
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSaving(true)
+    setError('')
+    setSaved(false)
+    try {
+      const updated = await api.layers.update(layer.id, {
+        workspace_id: workspaceId !== layer.workspace_id ? workspaceId : undefined,
+        description: description || null,
+        attribution: attribution || null,
+        datetime_column: datetimeColumn || null,
+      })
+      onUpdate(updated)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="bg-white rounded-lg border border-gray-200 p-6 max-w-lg space-y-5"
+    >
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Workspace</label>
+        <select
+          value={workspaceId}
+          onChange={(e) => setWorkspaceId(e.target.value)}
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+        >
+          {workspaces.map((ws) => (
+            <option key={ws.id} value={ws.id}>
+              {ws.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+        <textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          rows={3}
+          placeholder="A short description of this layer"
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Attribution</label>
+        <input
+          type="text"
+          value={attribution}
+          onChange={(e) => setAttribution(e.target.value)}
+          placeholder="e.g. OpenStreetMap contributors"
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Datetime column</label>
+        <select
+          value={datetimeColumn}
+          onChange={(e) => setDatetimeColumn(e.target.value)}
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+        >
+          <option value="">None</option>
+          {dateColumns.map((c) => (
+            <option key={c.column} value={c.column}>
+              {c.column} ({c.type})
+            </option>
+          ))}
+        </select>
+        <p className="text-xs text-gray-400 mt-1">
+          Enables the OGC <code>?datetime=</code> filter on this layer
+        </p>
+      </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      <div className="flex items-center gap-3">
+        <button
+          type="submit"
+          disabled={saving}
+          className="bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-800 disabled:opacity-50 transition-colors"
+        >
+          {saving ? 'Saving...' : 'Save'}
+        </button>
+        {saved && <span className="text-sm text-green-600">Saved successfully</span>}
+      </div>
+    </form>
   )
 }
 

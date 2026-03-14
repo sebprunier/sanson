@@ -16,6 +16,7 @@ interface LayerRow {
   geometry_column: string
   geometry_type: string | null
   id_column: string
+  datetime_column: string | null
   srid: number
   bbox: number[] | null
   feature_count: number | null
@@ -36,9 +37,11 @@ interface CreateLayerBody {
 }
 
 interface UpdateLayerBody {
+  workspace_id?: string
   name?: string
   description?: string
   attribution?: string
+  datetime_column?: string | null
   geometry_column?: string
   geometry_type?: string
   id_column?: string
@@ -58,6 +61,7 @@ const layerSchema = {
     geometry_column: { type: 'string' },
     geometry_type: { type: 'string', nullable: true },
     id_column: { type: 'string' },
+    datetime_column: { type: 'string', nullable: true },
     srid: { type: 'integer' },
     bbox: { type: 'array', nullable: true, items: { type: 'number' } },
     feature_count: { type: 'integer', nullable: true },
@@ -68,7 +72,7 @@ const layerSchema = {
 
 const LAYER_SELECT = `
   SELECT l.id, l.workspace_id, w.name AS workspace_name, l.name, l.description, l.attribution,
-         l.table_name, l.geometry_column, l.geometry_type, l.id_column, l.srid,
+         l.table_name, l.geometry_column, l.geometry_type, l.id_column, l.datetime_column, l.srid,
          l.bbox, l.feature_count, l.created_at, l.updated_at
   FROM sanson_layers l
   JOIN sanson_workspaces w ON w.id = l.workspace_id
@@ -207,9 +211,11 @@ export async function adminLayersRoutes(
       body: {
         type: 'object',
         properties: {
+          workspace_id: { type: 'string' },
           name: { type: 'string', minLength: 1, maxLength: 100 },
-          description: { type: 'string' },
-          attribution: { type: 'string' },
+          description: { type: 'string', nullable: true },
+          attribution: { type: 'string', nullable: true },
+          datetime_column: { type: 'string', nullable: true },
           geometry_column: { type: 'string' },
           geometry_type: { type: 'string' },
           id_column: { type: 'string' },
@@ -220,28 +226,46 @@ export async function adminLayersRoutes(
     },
     handler: async (request, reply) => {
       const b = request.body
-      const { rows } = await options.db.query<{ id: string }>(
-        `UPDATE sanson_layers
-           SET name = COALESCE($2, name),
-               description = COALESCE($3, description),
-               attribution = COALESCE($4, attribution),
-               geometry_column = COALESCE($5, geometry_column),
-               geometry_type = COALESCE($6, geometry_type),
-               id_column = COALESCE($7, id_column),
-               srid = COALESCE($8, srid),
-               updated_at = now()
-           WHERE id = $1
-           RETURNING id`,
-        [
+
+      // Build dynamic SET clause — only update fields that are explicitly provided
+      const sets: string[] = []
+      const params: unknown[] = [request.params.id]
+      let idx = 2
+
+      const addField = (col: string, value: unknown) => {
+        if (value !== undefined) {
+          sets.push(`${col} = $${idx}`)
+          params.push(value)
+          idx++
+        }
+      }
+
+      addField('workspace_id', b.workspace_id)
+      addField('name', b.name)
+      addField('description', b.description)
+      addField('attribution', b.attribution)
+      addField('datetime_column', b.datetime_column)
+      addField('geometry_column', b.geometry_column)
+      addField('geometry_type', b.geometry_type)
+      addField('id_column', b.id_column)
+      addField('srid', b.srid)
+
+      if (sets.length === 0) {
+        const result = await options.db.query<LayerRow>(`${LAYER_SELECT} WHERE l.id = $1`, [
           request.params.id,
-          b.name ?? null,
-          b.description ?? null,
-          b.attribution ?? null,
-          b.geometry_column ?? null,
-          b.geometry_type ?? null,
-          b.id_column ?? null,
-          b.srid ?? null,
-        ],
+        ])
+        if (result.rows.length === 0) {
+          reply.status(404)
+          return { statusCode: 404, error: 'Not Found', message: 'Layer not found' }
+        }
+        return result.rows[0]
+      }
+
+      sets.push('updated_at = now()')
+
+      const { rows } = await options.db.query<{ id: string }>(
+        `UPDATE sanson_layers SET ${sets.join(', ')} WHERE id = $1 RETURNING id`,
+        params,
       )
       if (rows.length === 0) {
         reply.status(404)
