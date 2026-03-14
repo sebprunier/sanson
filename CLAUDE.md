@@ -91,6 +91,7 @@ pnpm --filter @sanson/admin e2e:headed      # same, with visible browser
 - **Layer style / legend** — `style` JSONB column on `sanson_layers`. Three types: `single` (one color), `categorized` (unique values → colors via MapLibre `match`), `graduated` (numeric ranges → colors via MapLibre `step` with `to-number`). Auto-classification endpoint `GET /api/admin/layers/:id/classify` computes distinct values or quantile breakpoints from PostgreSQL. OGC endpoint `GET /collections/:id/style` exposes the config. Frontend converts style config to MapLibre paint expressions; legend is a DOM overlay.
 - **GeoJSON export** — `GET /api/admin/layers/:id/export`. Streams full layer as GeoJSON FeatureCollection with `Content-Disposition` header. Respects `exposed_fields` filtering.
 - **Dynamic layer update** — PUT handler uses dynamic SET clause builder (`addField()`) that only includes provided fields, avoiding null/undefined ambiguity for nullable columns (description, attribution, datetime_column, exposed_fields, style).
+- **CRS by Reference** — `?crs=` param on items/feature endpoints for output reprojection, `?bbox-crs=` for bbox coordinate system. `Content-Crs` response header. Supported CRS per collection: CRS84, EPSG:4326, EPSG:3857, EPSG:2154, plus the layer's native SRID. CRS utilities in `packages/api/src/crs.ts`.
 - **WGS84 (EPSG:4326) by default** for API output
 - **Table prefix `sanson_`** for metadata tables (workspaces, layers, import history) — no dedicated schema for now, revisit later if needed
 - **Vite proxy** — admin UI dev server on port 5173 proxies `/api`, `/collections`, `/conformance`, `/health` to API on port 3000
@@ -108,11 +109,7 @@ pnpm --filter @sanson/admin e2e:headed      # same, with visible browser
 - Docker build for production deployment
 - `packages/core/` extraction (shared types, CQL2 parser)
 
-### 3. Conformance V2
-
-- CRS by Reference (content negotiation for coordinate systems)
-
-### 4. OGC CITE validation
+### 3. OGC CITE validation
 
 - Run OGC official test suite (TEAM Engine) against Sanson to validate conformance
 - Docker: `ogccite/teamengine-production` — test suites for Features 1.0 and Tiles 1.0

@@ -567,6 +567,132 @@ describe('GET /collections/:collectionId/items — datetime filter', () => {
   })
 })
 
+describe('CRS by Reference', () => {
+  let container: StartedPostgreSqlContainer
+
+  beforeAll(async () => {
+    container = await new PostgreSqlContainer('postgis/postgis:16-3.4').start()
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+    await db.query(initSql)
+
+    await db.query(
+      `INSERT INTO sanson_workspaces (id, name)
+       VALUES ('00000000-0000-0000-0000-000000000070', 'crs')`,
+    )
+
+    await db.query(`
+      CREATE TABLE crs_points (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100),
+        geom GEOMETRY(Point, 4326)
+      )
+    `)
+    await db.query(`CREATE INDEX idx_crs_points_geom ON crs_points USING GIST (geom)`)
+    await db.query(`
+      INSERT INTO crs_points (name, geom) VALUES
+        ('Paris', ST_SetSRID(ST_MakePoint(2.35, 48.86), 4326))
+    `)
+
+    await db.query(
+      `INSERT INTO sanson_layers (workspace_id, name, table_name, geometry_column, id_column, srid)
+       VALUES ('00000000-0000-0000-0000-000000000070', 'points', 'crs_points', 'geom', 'id', 4326)`,
+    )
+
+    await db.end()
+  })
+
+  afterAll(async () => {
+    await container.stop()
+  })
+
+  it('collection metadata includes multiple CRS', async () => {
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+    const app = buildApp(db)
+    const response = await app.inject({ method: 'GET', url: '/collections/crs:points' })
+    await app.close()
+
+    const body = response.json()
+    expect(body.crs).toContain('http://www.opengis.net/def/crs/OGC/1.3/CRS84')
+    expect(body.crs).toContain('http://www.opengis.net/def/crs/EPSG/0/4326')
+    expect(body.crs).toContain('http://www.opengis.net/def/crs/EPSG/0/3857')
+    expect(body.crs).toContain('http://www.opengis.net/def/crs/EPSG/0/2154')
+    expect(body.storageCrs).toBe('http://www.opengis.net/def/crs/EPSG/0/4326')
+  })
+
+  it('default response has Content-Crs CRS84 header', async () => {
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+    const app = buildApp(db)
+    const response = await app.inject({ method: 'GET', url: '/collections/crs:points/items' })
+    await app.close()
+
+    expect(response.statusCode).toBe(200)
+    expect(response.headers['content-crs']).toBe('<http://www.opengis.net/def/crs/OGC/1.3/CRS84>')
+  })
+
+  it('?crs= reprojects coordinates to EPSG:3857', async () => {
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+    const app = buildApp(db)
+    const response = await app.inject({
+      method: 'GET',
+      url: '/collections/crs:points/items?crs=http://www.opengis.net/def/crs/EPSG/0/3857',
+    })
+    await app.close()
+
+    expect(response.statusCode).toBe(200)
+    expect(response.headers['content-crs']).toBe('<http://www.opengis.net/def/crs/EPSG/0/3857>')
+    const body = response.json()
+    const paris = body.features[0]
+    // Paris in EPSG:3857 should be ~261600, ~6250900 (meters)
+    const [x, y] = paris.geometry.coordinates
+    expect(x).toBeGreaterThan(200000)
+    expect(x).toBeLessThan(300000)
+    expect(y).toBeGreaterThan(6200000)
+    expect(y).toBeLessThan(6300000)
+  })
+
+  it('single feature supports ?crs=', async () => {
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+    const app = buildApp(db)
+    const response = await app.inject({
+      method: 'GET',
+      url: '/collections/crs:points/items/1?crs=http://www.opengis.net/def/crs/EPSG/0/3857',
+    })
+    await app.close()
+
+    expect(response.statusCode).toBe(200)
+    expect(response.headers['content-crs']).toBe('<http://www.opengis.net/def/crs/EPSG/0/3857>')
+    const [x] = response.json().geometry.coordinates
+    expect(x).toBeGreaterThan(200000)
+  })
+
+  it('returns 400 for unsupported CRS', async () => {
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+    const app = buildApp(db)
+    const response = await app.inject({
+      method: 'GET',
+      url: '/collections/crs:points/items?crs=http://example.com/bad',
+    })
+    await app.close()
+
+    expect(response.statusCode).toBe(400)
+    expect(response.json().message).toContain('Unsupported CRS')
+  })
+
+  it('pagination links preserve crs param', async () => {
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+    const app = buildApp(db)
+    const response = await app.inject({
+      method: 'GET',
+      url: '/collections/crs:points/items?crs=http://www.opengis.net/def/crs/EPSG/0/3857',
+    })
+    await app.close()
+
+    const body = response.json()
+    const selfLink = body.links.find((l: { rel: string }) => l.rel === 'self')
+    expect(selfLink.href).toContain('crs=')
+  })
+})
+
 describe('GET /collections/:collectionId/tiles/:z/:x/:y.pbf', () => {
   let container: StartedPostgreSqlContainer
 

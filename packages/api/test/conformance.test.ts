@@ -53,6 +53,7 @@ describe('GET /conformance', () => {
       'http://www.opengis.net/spec/cql2/1.0/req/advanced-comparison-operators',
       'http://www.opengis.net/spec/cql2/1.0/req/cql2-json',
       'http://www.opengis.net/spec/cql2/1.0/req/temporal-operators',
+      'http://www.opengis.net/spec/ogcapi-features-2/1.0/conf/crs',
     ]
 
     for (const uri of expected) {

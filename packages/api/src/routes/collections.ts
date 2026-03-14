@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyReply } from 'fastify'
 import { Pool } from 'pg'
 import { parseCql2Text } from '../cql2'
 import { parseCql2Json } from '../cql2-json'
+import { buildSupportedCrs, resolveOutputSrid, uriToSrid } from '../crs'
 
 interface CollectionsRouteOptions {
   db: Pool
@@ -24,6 +25,7 @@ interface OgcCollection {
   }
   itemType: 'feature'
   crs: string[]
+  storageCrs?: string
   links: OgcLink[]
 }
 
@@ -38,6 +40,7 @@ interface LayerRow {
   description: string | null
   bbox: number[] | null
   temporal_extent: (string | null)[] | null
+  srid: number
 }
 
 interface ExposedField {
@@ -73,6 +76,7 @@ const collectionResponseSchema = {
     extent: { type: 'object', additionalProperties: true },
     itemType: { type: 'string' },
     crs: { type: 'array', items: { type: 'string' } },
+    storageCrs: { type: 'string' },
     links: { type: 'array' },
   },
 } as const
@@ -143,7 +147,8 @@ function buildCollection(row: LayerRow): OgcCollection {
     description: row.description,
     ...(Object.keys(extent).length > 0 ? { extent } : {}),
     itemType: 'feature',
-    crs: ['http://www.opengis.net/def/crs/OGC/1.3/CRS84'],
+    crs: buildSupportedCrs(row.srid),
+    storageCrs: `http://www.opengis.net/def/crs/EPSG/0/${row.srid}`,
     links: [
       { href: `/collections/${collectionId}`, rel: 'self', type: 'application/json' },
       { href: `/collections/${collectionId}/items`, rel: 'items', type: 'application/geo+json' },
@@ -244,7 +249,7 @@ export async function collectionsRoutes(
     },
     handler: async () => {
       const { rows } = await options.db.query<LayerRow>(
-        `SELECT w.name AS workspace_name, l.name, l.description, l.bbox, l.temporal_extent
+        `SELECT w.name AS workspace_name, l.name, l.description, l.bbox, l.temporal_extent, l.srid
          FROM sanson_layers l
          JOIN sanson_workspaces w ON w.id = l.workspace_id
          ORDER BY w.name, l.name`,
@@ -280,7 +285,7 @@ export async function collectionsRoutes(
       if (!parsed) return sendNotFound(reply)
 
       const { rows } = await options.db.query<LayerRow>(
-        `SELECT w.name AS workspace_name, l.name, l.description, l.bbox, l.temporal_extent
+        `SELECT w.name AS workspace_name, l.name, l.description, l.bbox, l.temporal_extent, l.srid
            FROM sanson_layers l
            JOIN sanson_workspaces w ON w.id = l.workspace_id
            WHERE w.name = $1 AND l.name = $2`,
@@ -305,6 +310,8 @@ export async function collectionsRoutes(
       radius?: string
       filter?: string
       'filter-lang'?: string
+      crs?: string
+      'bbox-crs'?: string
     }
   }>('/collections/:collectionId/items', {
     schema: {
@@ -346,6 +353,14 @@ export async function collectionsRoutes(
             type: 'string',
             description: 'Filter language: cql2-text (default) or cql2-json',
           },
+          crs: {
+            type: 'string',
+            description: 'Output CRS URI (default: CRS84)',
+          },
+          'bbox-crs': {
+            type: 'string',
+            description: 'CRS URI of the bbox parameter values (default: CRS84)',
+          },
         },
       },
       response: { 200: featureCollectionResponseSchema },
@@ -361,8 +376,33 @@ export async function collectionsRoutes(
       const offset = Math.max(parseInt(request.query.offset ?? '0', 10) || 0, 0)
 
       const collectionId = `${layer.workspace_name}:${layer.name}`
+
+      // Resolve output CRS
+      const supportedCrs = buildSupportedCrs(layer.srid)
+      let outputCrs: { srid: number; crsUri: string }
+      try {
+        outputCrs = resolveOutputSrid(request.query.crs)
+      } catch {
+        reply.status(400)
+        return {
+          statusCode: 400,
+          error: 'Bad Request',
+          message: `Unsupported CRS: ${request.query.crs}`,
+        }
+      }
+      if (request.query.crs && !supportedCrs.includes(outputCrs.crsUri)) {
+        reply.status(400)
+        return {
+          statusCode: 400,
+          error: 'Bad Request',
+          message: `CRS not supported for this collection: ${request.query.crs}. Supported: ${supportedCrs.join(', ')}`,
+        }
+      }
+
       const geomExpr =
-        layer.srid === 4326 ? layer.geometry_column : `ST_Transform(${layer.geometry_column}, 4326)`
+        layer.srid === outputCrs.srid
+          ? layer.geometry_column
+          : `ST_Transform(${layer.geometry_column}, ${outputCrs.srid})`
 
       // Build WHERE clauses
       const conditions: string[] = []
@@ -372,8 +412,18 @@ export async function collectionsRoutes(
       if (request.query.bbox) {
         const bbox = parseBbox(request.query.bbox)
         if (bbox) {
+          // Resolve bbox CRS (default: 4326/CRS84)
+          const bboxSrid = request.query['bbox-crs'] ? uriToSrid(request.query['bbox-crs']) : 4326
+          if (bboxSrid === null) {
+            reply.status(400)
+            return {
+              statusCode: 400,
+              error: 'Bad Request',
+              message: `Unsupported bbox-crs: ${request.query['bbox-crs']}`,
+            }
+          }
           conditions.push(
-            `${layer.geometry_column} && ST_Transform(ST_MakeEnvelope($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, 4326), ${layer.srid})`,
+            `${layer.geometry_column} && ST_Transform(ST_MakeEnvelope($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, ${bboxSrid}), ${layer.srid})`,
           )
           params.push(...bbox)
           paramIndex += 4
@@ -552,6 +602,8 @@ export async function collectionsRoutes(
       if (request.query.radius) extraParams.set('radius', request.query.radius)
       if (request.query.filter) extraParams.set('filter', request.query.filter)
       if (request.query['filter-lang']) extraParams.set('filter-lang', request.query['filter-lang'])
+      if (request.query.crs) extraParams.set('crs', request.query.crs)
+      if (request.query['bbox-crs']) extraParams.set('bbox-crs', request.query['bbox-crs'])
 
       function buildLink(rel: string, linkOffset: number): OgcLink {
         const p = new URLSearchParams(extraParams)
@@ -579,6 +631,7 @@ export async function collectionsRoutes(
 
       // HTTP headers
       reply.header('X-Total-Count', numberMatched)
+      reply.header('Content-Crs', `<${outputCrs.crsUri}>`)
 
       const linkHeader = links.map((l) => `<${l.href}>; rel="${l.rel}"`).join(', ')
       reply.header('Link', linkHeader)
@@ -597,6 +650,7 @@ export async function collectionsRoutes(
   // GET /collections/:collectionId/items/:fid
   app.get<{
     Params: { collectionId: string; fid: string }
+    Querystring: { crs?: string }
   }>('/collections/:collectionId/items/:fid', {
     schema: {
       tags: ['OGC'],
@@ -612,6 +666,12 @@ export async function collectionsRoutes(
           fid: { type: 'string', description: 'Feature identifier' },
         },
         required: ['collectionId', 'fid'],
+      },
+      querystring: {
+        type: 'object',
+        properties: {
+          crs: { type: 'string', description: 'Output CRS URI (default: CRS84)' },
+        },
       },
       response: {
         200: {
@@ -634,8 +694,24 @@ export async function collectionsRoutes(
       if (!layer) return sendNotFound(reply)
 
       const collectionId = `${layer.workspace_name}:${layer.name}`
+
+      // Resolve output CRS
+      let fidOutputCrs: { srid: number; crsUri: string }
+      try {
+        fidOutputCrs = resolveOutputSrid(request.query.crs)
+      } catch {
+        reply.status(400)
+        return {
+          statusCode: 400,
+          error: 'Bad Request',
+          message: `Unsupported CRS: ${request.query.crs}`,
+        }
+      }
+
       const geomExpr =
-        layer.srid === 4326 ? layer.geometry_column : `ST_Transform(${layer.geometry_column}, 4326)`
+        layer.srid === fidOutputCrs.srid
+          ? layer.geometry_column
+          : `ST_Transform(${layer.geometry_column}, ${fidOutputCrs.srid})`
 
       const propsExpr = buildPropertiesExpr(layer)
       const { rows } = await options.db.query<FeatureRow>(
@@ -651,6 +727,8 @@ export async function collectionsRoutes(
         reply.status(404)
         return { statusCode: 404, error: 'Not Found', message: 'Feature not found' }
       }
+
+      reply.header('Content-Crs', `<${fidOutputCrs.crsUri}>`)
 
       const row = rows[0]
       return {

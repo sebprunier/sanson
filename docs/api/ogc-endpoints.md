@@ -53,7 +53,7 @@ Declares the OGC conformance classes supported by Sanson:
 | Tile Matrix Set          | Implemented |
 | CQL2 JSON                | Implemented |
 | CQL2 Temporal            | Implemented |
-| CRS by Reference         | Planned     |
+| CRS by Reference         | Implemented |
 
 ## OpenAPI specification
 
@@ -128,10 +128,35 @@ Returns features as a GeoJSON FeatureCollection with pagination.
 | `datetime`               | Temporal filter (requires configured `datetime_column`) | `?datetime=2024-01-01/2024-12-31` |
 | `lat` + `lon`            | Point intersection filter                               | `?lat=48.85&lon=2.35`             |
 | `lat` + `lon` + `radius` | Radius search in meters                                 | `?lat=48.85&lon=2.35&radius=1000` |
-| `filter`                 | CQL2 Text expression                                    | `?filter=population>100000`       |
-| `filter-lang`            | Filter language (`cql2-text`)                           | `?filter-lang=cql2-text`          |
+| `filter`                 | CQL2 Text or JSON expression                            | `?filter=population>100000`       |
+| `filter-lang`            | Filter language (`cql2-text` or `cql2-json`)            | `?filter-lang=cql2-text`          |
+| `crs`                    | Output CRS URI (default: CRS84)                         | `?crs=http://...EPSG/0/3857`      |
+| `bbox-crs`               | CRS of bbox values (default: CRS84)                     | `?bbox-crs=http://...EPSG/0/3857` |
 
 See [CQL2 Filtering](/api/cql2-filtering) and [Spatial Filtering](/api/spatial-filtering) for details.
+
+### Coordinate Reference Systems
+
+By default, coordinates are returned in WGS84 (CRS84, longitude/latitude). Use the `crs` parameter to request coordinates in a different CRS:
+
+```
+GET /collections/default:communes/items?crs=http://www.opengis.net/def/crs/EPSG/0/2154
+```
+
+The response includes a `Content-Crs` header indicating the CRS used:
+
+```
+Content-Crs: <http://www.opengis.net/def/crs/EPSG/0/2154>
+```
+
+Supported CRS per collection are listed in the collection metadata (`crs` array). Common CRS include:
+
+- `http://www.opengis.net/def/crs/OGC/1.3/CRS84` (default, WGS84 lon/lat)
+- `http://www.opengis.net/def/crs/EPSG/0/4326` (WGS84)
+- `http://www.opengis.net/def/crs/EPSG/0/3857` (Web Mercator)
+- `http://www.opengis.net/def/crs/EPSG/0/2154` (Lambert 93, France)
+
+The `bbox-crs` parameter specifies the CRS of bbox values when they are not in WGS84.
 
 ### Pagination
 
