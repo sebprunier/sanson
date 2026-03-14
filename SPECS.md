@@ -1,6 +1,6 @@
 # Sanson — Specifications
 
-> Version 0.4 — March 2026
+> Version 0.5 — March 2026
 
 ---
 
@@ -87,13 +87,35 @@ A Mapbox GL JSON style associated with a layer, used in the administration inter
 
 Sanson is distributed as a **single binary**. Startup behavior is determined by the `NODE_MODE` environment variable.
 
-| Value    | Behavior                                                                 |
-| -------- | ------------------------------------------------------------------------ |
-| `api`    | Starts the HTTP server only (Fastify)                                    |
-| `worker` | Starts the ingestion engine only (pg-boss worker)                        |
-| `all`    | Starts both (default — convenient for development and small deployments) |
+| Value    | Behavior                                                                              |
+| -------- | ------------------------------------------------------------------------------------- |
+| `api`    | Starts the HTTP server only (Fastify)                                                 |
+| `worker` | Starts the ingestion engine only (pg-boss worker)                                     |
+| `ui`     | Starts the HTTP server and serves the admin UI static build (planned)                 |
+| `all`    | Starts both API + worker (default — convenient for development and small deployments) |
 
 This pattern allows scaling API nodes and Worker nodes independently based on load.
+
+**Lifecycle in `server.ts`:**
+
+```
+Read NODE_MODE from env (default: 'all')
+
+if (mode === 'api' || mode === 'all') {
+  await boss.start()             // needed for boss.send()
+  const app = buildApp(db, boss)
+  await app.listen(...)
+}
+
+if (mode === 'worker' || mode === 'all') {
+  await boss.start()             // needed for boss.work()
+  await startWorker(boss, db)    // registers job handlers
+}
+
+// Graceful shutdown: stop app + stop boss
+```
+
+> Note: `boss.start()` must be called before any `send()` or `work()` call. It creates pg-boss internal tables on first run.
 
 ```mermaid
 graph TD
@@ -112,11 +134,12 @@ graph TD
 
     subgraph Worker ["Worker Nodes (NODE_MODE=worker)"]
         W1["1. Dequeue a job from the queue"]
-        W2["2. Run ogr2ogr → CSV + EWKT"]
-        W3["3. Bulk COPY → PostgreSQL"]
+        W2["2. Parse source file (GeoJSON / ogr2ogr)"]
+        W3["3. Create table + insert features (batches of 500)"]
         W4["4. Create GIST spatial index"]
-        W5["5. Update layer metadata"]
-        W1 --> W2 --> W3 --> W4 --> W5
+        W5["5. Update layer metadata (bbox, feature_count)"]
+        W6["6. Update progress + logs in sanson_import_history"]
+        W1 --> W2 --> W3 --> W4 --> W5 --> W6
     end
 
     Clients --> API
@@ -140,14 +163,22 @@ This separation ensures that OGC endpoints live exactly where the spec expects t
 ```mermaid
 flowchart TD
     Upload["Uploaded file (.shp, .geojson)"]
-    Ogr2ogr["ogr2ogr<br/>Source SRID detection, reprojection to target SRID<br/>CSV export with EWKT geometry (SRID=XXXX;)<br/>Options: -lco GEOMETRY=AS_WKT -lco SEPARATOR=SEMICOLON"]
-    Transform["(optional) Field transformation<br/>Filtering, renaming"]
-    Copy["Bulk COPY to PostgreSQL<br/>DELIMITER ';' CSV HEADER<br/>FREEZE option for initial loads"]
+    Save["Save to disk (UPLOAD_DIR)"]
+    Queue["Queue pg-boss job (sanson-ingest)"]
+    Parse["Worker: parse source file"]
+    Table["Create PostGIS table if needed"]
+    Insert["Insert features in batches of 500<br/>Update progress every batch"]
     Index["Create GIST spatial index<br/>on the geometry column"]
     Metadata["Update layer metadata<br/>(bbox, feature_count, temporal_extent)"]
+    Cleanup["Delete uploaded file"]
 
-    Upload --> Ogr2ogr --> Transform --> Copy --> Index --> Metadata
+    Upload --> Save --> Queue
+    Queue -.->|async| Parse --> Table --> Insert --> Index --> Metadata --> Cleanup
 ```
+
+**GeoJSON ingestion (V1):** direct parsing + batch insert via `ST_GeomFromGeoJSON`. Features are inserted in batches of 500, with progress updated in `sanson_import_history` after each batch.
+
+**Shapefile ingestion (planned):** via `ogr2ogr` (GDAL CLI) for format conversion + reprojection in a single pass, then `COPY` for bulk insert. Depends on pg-boss for async processing.
 
 **Implementation notes (from auxalentours-api):**
 
@@ -161,6 +192,42 @@ The job queue relies on **PostgreSQL via `pg-boss`** — zero additional infrast
 
 The mechanism is based on `SELECT ... FOR UPDATE SKIP LOCKED`: multiple workers can run in parallel without risk of processing the same job twice. PostgreSQL handles concurrency atomically.
 
+**pg-boss configuration:**
+
+```typescript
+new PgBoss({
+  connectionString,
+  schema: 'pgboss', // isolated from sanson_ tables
+  retryLimit: 3,
+  retryDelay: 30, // seconds between retries
+  expireInHours: 2, // stuck job expiration
+  archiveCompletedAfterSeconds: 7 * 24 * 60 * 60, // 7 days
+})
+```
+
+**Queue name:** `sanson-ingest` — single queue for all ingestion jobs.
+
+**Job payload:**
+
+```typescript
+interface IngestJobPayload {
+  importHistoryId: string // UUID linking to sanson_import_history
+  filePath: string // path to uploaded file on disk
+  workspaceId: string
+  layerName: string
+  srid: number
+  sourceFileName: string
+}
+```
+
+**Job lifecycle:**
+
+1. API receives upload → saves file to disk → creates `sanson_import_history` row (`status = 'pending'`) → `boss.send('sanson-ingest', payload)` → returns `202 Accepted`
+2. Worker picks up job → updates `status = 'running'`, `started_at = now()`
+3. Worker processes → parses file, creates table, inserts features in batches of 500, updates `progress` and `imported_features` every batch
+4. Worker completes → updates `status = 'completed'`, `completed_at = now()`, `progress = 100`, computes bbox and updates layer metadata
+5. Worker fails → updates `status = 'failed'`, `error = <message>`, `completed_at = now()`. pg-boss handles retry according to `retryLimit`.
+
 pg-boss features used:
 
 - Automatic retry on failure (configurable: number of attempts, delay)
@@ -170,6 +237,13 @@ pg-boss features used:
 ### 5.6 Uploaded file storage
 
 Initial phase: direct upload on the node receiving the request, local storage, file path passed to the worker via the job record.
+
+- Upload directory configured via `UPLOAD_DIR` env var (default: `./uploads`)
+- Files saved as `${UPLOAD_DIR}/${importHistoryId}.geojson`
+- Worker deletes the file after successful import
+- On failure with retries exhausted, files are kept for debugging
+
+**Important:** when `NODE_MODE=api` and `NODE_MODE=worker` run as separate processes, they must have access to the same filesystem. This constraint is removed by migrating to object storage.
 
 Planned evolution: object storage (S3-compatible) to decouple upload and processing — without changing business logic.
 
@@ -513,10 +587,47 @@ Returns a JSON Schema describing the filterable properties of the collection. Dy
 ### 8.6 Jobs (Administration API)
 
 ```
-POST /api/admin/jobs/ingest         Create an ingestion job (multipart: file + config)
-GET  /api/admin/jobs/{jobId}        Job state and logs
-GET  /api/admin/jobs                Job history (filterable by status, layer, workspace)
+POST /api/admin/import              Upload file + queue ingestion job (returns 202 Accepted)
+GET  /api/admin/jobs                Job history (filterable by status, layer_id, limit/offset)
+GET  /api/admin/jobs/{jobId}        Job state, progress, and logs
 ```
+
+**`POST /api/admin/import` response (202 Accepted):**
+
+```json
+{
+  "import_id": "uuid",
+  "status": "pending",
+  "message": "Import job queued"
+}
+```
+
+**`GET /api/admin/jobs/{jobId}` response:**
+
+```json
+{
+  "id": "uuid",
+  "job_id": "uuid",
+  "layer_id": "uuid",
+  "source_file": "centrales.geojson",
+  "status": "running",
+  "progress": 45,
+  "total_features": 1000,
+  "imported_features": 450,
+  "logs": [
+    { "ts": "2026-03-14T10:00:01Z", "level": "info", "message": "Starting import" },
+    { "ts": "2026-03-14T10:00:02Z", "level": "info", "message": "Table created: data_centrales" },
+    { "ts": "2026-03-14T10:00:05Z", "level": "info", "message": "450/1000 features imported" }
+  ],
+  "error": null,
+  "duration_ms": null,
+  "created_at": "2026-03-14T10:00:00Z",
+  "started_at": "2026-03-14T10:00:01Z",
+  "completed_at": null
+}
+```
+
+**`GET /api/admin/jobs` query params:** `?status=pending|running|completed|failed`, `?layer_id=uuid`, `?limit=20&offset=0`. Returns paginated list ordered by `created_at DESC`.
 
 ### 8.7 Workspaces and Layers (Administration API)
 
@@ -568,8 +679,11 @@ Single-page React application, served by API nodes.
 - File upload (GeoJSON or Shapefile ZIP)
 - Workspace and target layer selection (existing or new)
 - Target SRID choice (default: 4326)
-- Real-time progress tracking
-- Execution logs
+- On submit: receives `202 Accepted` with `import_id`, transitions to progress view
+- Progress view: status badge, progress bar (0-100%), features count (N / total), live log feed
+- Polling `GET /api/admin/jobs/:importId` every 2 seconds while status is `pending` or `running`
+- On completion: success view with link to layer
+- On failure: error message and logs
 
 ### API explorer
 
@@ -613,19 +727,25 @@ CREATE TABLE sanson_layers (
     UNIQUE(workspace_id, name)
 );
 
--- Import history
+-- Import history (also serves as job tracking table)
 CREATE TABLE sanson_import_history (
-    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    layer_id      UUID REFERENCES sanson_layers(id),
-    job_id        UUID,                              -- pg-boss reference
-    source_file   VARCHAR(500),
-    source_srid   INTEGER,
-    target_srid   INTEGER,
-    feature_count BIGINT,
-    status        VARCHAR(20),                       -- completed, failed
-    error         TEXT,
-    duration_ms   INTEGER,
-    created_at    TIMESTAMPTZ DEFAULT now()
+    id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    layer_id           UUID REFERENCES sanson_layers(id),
+    job_id             UUID,                              -- pg-boss reference
+    source_file        VARCHAR(500),
+    source_srid        INTEGER,
+    target_srid        INTEGER,
+    feature_count      BIGINT,
+    total_features     BIGINT,                            -- total features to import
+    imported_features  BIGINT DEFAULT 0,                  -- features imported so far
+    progress           SMALLINT DEFAULT 0,                -- 0-100
+    status             VARCHAR(20) DEFAULT 'pending',     -- pending, running, completed, failed
+    error              TEXT,
+    logs               JSONB DEFAULT '[]'::jsonb,         -- structured log entries [{ts, level, message}]
+    duration_ms        INTEGER,
+    created_at         TIMESTAMPTZ DEFAULT now(),
+    started_at         TIMESTAMPTZ,                       -- when the worker picked it up
+    completed_at       TIMESTAMPTZ                        -- when it finished (success or failure)
 );
 ```
 
@@ -642,9 +762,18 @@ CREATE TABLE sanson_import_history (
 ```
 sanson/
 ├── packages/
-│   ├── core/           Shared types, DB utils, models, CQL2 Text parser
+│   ├── core/           Shared types, DB utils, models, CQL2 Text parser (planned)
 │   ├── api/            Fastify server, OGC + admin routes, handlers
-│   └── worker/         pg-boss workers, ogr2ogr pipeline
+│   └── worker/         pg-boss workers, ingestion handlers
+│       ├── src/
+│       │   ├── index.ts              exports: createBoss(), startWorker()
+│       │   ├── boss.ts               pg-boss instance factory
+│       │   ├── handlers/
+│       │   │   └── ingest.ts         GeoJSON ingestion handler
+│       │   └── utils/
+│       │       └── progress.ts       helper to update progress in sanson_import_history
+│       └── test/
+│           └── ingest.test.ts
 ├── apps/
 │   └── admin/          React + MapLibre GL frontend
 ├── docker/
@@ -655,7 +784,7 @@ sanson/
 └── SPECS.md
 ```
 
-Single entry point: `packages/api` + `packages/worker` share `packages/core`. The `NODE_MODE` variable determines what starts.
+`packages/api` depends on `@sanson/worker` (imports `createBoss` to send jobs). The `NODE_MODE` variable determines what starts. `packages/core` is planned for later extraction of shared types and the CQL2 parser.
 
 ---
 
