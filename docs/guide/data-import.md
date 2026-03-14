@@ -117,13 +117,17 @@ When no separator is specified, Sanson counts occurrences of `;`, `,`, and tab c
 
 If longitude/latitude column names are not provided, Sanson matches header names against common conventions:
 
-| Longitude                         | Latitude                |
-| --------------------------------- | ----------------------- |
-| `longitude`, `lon`, `lng`, `long` | `latitude`, `lat`       |
-| `x`, `x_wgs84`, `x_l93`           | `y`, `y_wgs84`, `y_l93` |
-| `centroid_x`                      | `centroid_y`            |
+| Longitude                         | Latitude          |
+| --------------------------------- | ----------------- |
+| `longitude`, `lon`, `lng`, `long` | `latitude`, `lat` |
+| `x_wgs84`                         | `y_wgs84`         |
+| `x`, `centroid_x`                 | `y`, `centroid_y` |
 
-Matching is case-insensitive. If no match is found, the import fails with an error asking you to specify columns explicitly.
+Names are matched by priority: explicit names (`longitude`, `lat`...) first, then WGS84-specific (`x_wgs84`), then generic (`x`, `y`) last. Matching is case-insensitive. If no match is found, the import fails with an error asking you to specify columns explicitly.
+
+::: warning Projected coordinates
+Column names like `x_l93`/`y_l93` (Lambert 93) are **not** auto-detected because they contain projected coordinates in meters, not WGS84 degrees. To import such data, specify the columns and SRID explicitly.
+:::
 
 ### Column types
 
