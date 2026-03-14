@@ -114,7 +114,13 @@ pnpm --filter @sanson/admin e2e:headed      # same, with visible browser
 - CQL2 Temporal operators
 - CQL2 Spatial full (beyond S_INTERSECTS, S_WITHIN, S_CONTAINS)
 - CRS by Reference (content negotiation for coordinate systems)
-- OGC API Tiles conformance class
+
+### 4. OGC CITE validation
+
+- Run OGC official test suite (TEAM Engine) against Sanson to validate conformance
+- Docker: `ogccite/teamengine-production` — test suites for Features 1.0 and Tiles 1.0
+- Online: https://cite.opengeospatial.org/teamengine/
+- Fix any conformance gaps found by the test suite
 
 ## Out of scope — do not add
 
