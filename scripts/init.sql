@@ -43,7 +43,7 @@ ON CONFLICT DO NOTHING;
 -- Import history (also serves as job tracking table)
 CREATE TABLE IF NOT EXISTS sanson_import_history (
     id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    layer_id           UUID REFERENCES sanson_layers(id),
+    layer_id           UUID REFERENCES sanson_layers(id) ON DELETE CASCADE,
     job_id             UUID,
     source_file        VARCHAR(500),
     source_srid        INTEGER,

@@ -383,13 +383,24 @@ export async function adminLayersRoutes(
       },
     },
     handler: async (request, reply) => {
-      const { rowCount } = await options.db.query('DELETE FROM sanson_layers WHERE id = $1', [
-        request.params.id,
-      ])
-      if (rowCount === 0) {
+      // Fetch layer to get table_name before deleting
+      const { rows } = await options.db.query<{ table_name: string }>(
+        'SELECT table_name FROM sanson_layers WHERE id = $1',
+        [request.params.id],
+      )
+      if (rows.length === 0) {
         reply.status(404)
         return { statusCode: 404, error: 'Not Found', message: 'Layer not found' }
       }
+
+      const tableName = rows[0].table_name
+
+      // Delete layer (cascades to import_history)
+      await options.db.query('DELETE FROM sanson_layers WHERE id = $1', [request.params.id])
+
+      // Drop the data table
+      await options.db.query(`DROP TABLE IF EXISTS ${tableName}`)
+
       reply.status(204)
     },
   })
