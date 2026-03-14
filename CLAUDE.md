@@ -110,7 +110,6 @@ pnpm --filter @sanson/admin e2e:headed      # same, with visible browser
 
 ### 3. Conformance V2
 
-- CQL2 JSON encoding (currently only CQL2 Text)
 - CQL2 Temporal operators
 - CRS by Reference (content negotiation for coordinate systems)
 

@@ -1,6 +1,6 @@
 # CQL2 Filtering
 
-Sanson supports [OGC CQL2 Text](https://docs.ogc.org/is/21-065r2/21-065r2.html) for filtering features by attributes and geometry.
+Sanson supports [OGC CQL2](https://docs.ogc.org/is/21-065r2/21-065r2.html) for filtering features by attributes and geometry. Both **CQL2 Text** and **CQL2 JSON** encodings are supported.
 
 ## Usage
 
@@ -8,11 +8,12 @@ Add the `filter` parameter to any features request:
 
 ```
 GET /collections/{id}/items?filter=<expression>&filter-lang=cql2-text
+GET /collections/{id}/items?filter=<json>&filter-lang=cql2-json
 ```
 
-The `filter-lang` parameter is optional — `cql2-text` is the default (and currently only supported) value.
+The `filter-lang` parameter is optional — `cql2-text` is the default.
 
-## Operators
+## CQL2 Text operators
 
 ### Comparison
 
@@ -87,6 +88,71 @@ S_INTERSECTS(geom, POINT(2.35 48.85))
 S_WITHIN(geom, POLYGON((2.2 48.8, 2.5 48.8, 2.5 49.0, 2.2 49.0, 2.2 48.8)))
 S_CONTAINS(geom, POINT(2.35 48.85))
 S_DISJOINT(geom, POLYGON((0 0, 1 0, 1 1, 0 1, 0 0)))
+```
+
+## CQL2 JSON encoding
+
+CQL2 JSON uses a structured `{"op": ..., "args": [...]}` format. Properties are referenced as `{"property": "name"}`.
+
+### JSON operators
+
+| CQL2 Text equivalent | JSON `op`                               |
+| -------------------- | --------------------------------------- |
+| `=`, `<>`, `<`, etc. | Same (`=`, `<>`, `<`, `<=`, `>`, `>=`)  |
+| `AND`, `OR`          | `and`, `or` (2+ args)                   |
+| `NOT`                | `not` (1 arg)                           |
+| `LIKE`               | `like`                                  |
+| `ILIKE`              | `like` with `casei` wrappers            |
+| `IS NULL`            | `isNull`                                |
+| `IN`                 | `in` (second arg is an array)           |
+| `BETWEEN`            | `between` (3 args)                      |
+| `S_INTERSECTS`, etc. | `s_intersects`, etc. (GeoJSON geometry) |
+
+### JSON examples
+
+**Simple comparison:**
+
+```json
+{ "op": "=", "args": [{ "property": "name" }, "Paris"] }
+```
+
+**Combined filter:**
+
+```json
+{
+  "op": "and",
+  "args": [
+    { "op": ">", "args": [{ "property": "population" }, 50000] },
+    { "op": "=", "args": [{ "property": "departement" }, "75"] }
+  ]
+}
+```
+
+**Spatial filter with GeoJSON:**
+
+```json
+{
+  "op": "s_intersects",
+  "args": [{ "property": "geom" }, { "type": "Point", "coordinates": [2.35, 48.85] }]
+}
+```
+
+**Case-insensitive text search:**
+
+```json
+{
+  "op": "like",
+  "args": [
+    { "op": "casei", "args": [{ "property": "nom" }] },
+    { "op": "casei", "args": ["saint%"] }
+  ]
+}
+```
+
+**List membership:**
+
+```json
+{ "op": "in", "args": [{ "property": "type" }, ["commune", "arrondissement"]] }
 ```
 
 ## Examples

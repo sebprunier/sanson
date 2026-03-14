@@ -1,6 +1,7 @@
 import { FastifyInstance, FastifyReply } from 'fastify'
 import { Pool } from 'pg'
 import { parseCql2Text } from '../cql2'
+import { parseCql2Json } from '../cql2-json'
 
 interface CollectionsRouteOptions {
   db: Pool
@@ -340,8 +341,11 @@ export async function collectionsRoutes(
             type: 'string',
             description: 'Search radius in meters (requires lat and lon)',
           },
-          filter: { type: 'string', description: 'CQL2 Text filter expression' },
-          'filter-lang': { type: 'string', description: 'Filter language (default: cql2-text)' },
+          filter: { type: 'string', description: 'CQL2 filter expression (text or JSON)' },
+          'filter-lang': {
+            type: 'string',
+            description: 'Filter language: cql2-text (default) or cql2-json',
+          },
         },
       },
       response: { 200: featureCollectionResponseSchema },
@@ -452,10 +456,10 @@ export async function collectionsRoutes(
         }
       }
 
-      // CQL2 Text filter
+      // CQL2 filter (text or JSON)
       if (request.query.filter) {
         const filterLang = request.query['filter-lang'] ?? 'cql2-text'
-        if (filterLang !== 'cql2-text') {
+        if (filterLang !== 'cql2-text' && filterLang !== 'cql2-json') {
           reply.status(400)
           return {
             statusCode: 400,
@@ -472,13 +476,21 @@ export async function collectionsRoutes(
         )
         const allowedColumns = new Set(colRows.map((r) => r.column_name))
 
+        const cqlOptions = {
+          startParamIndex: paramIndex,
+          geometryColumn: layer.geometry_column,
+          srid: layer.srid,
+          allowedColumns,
+        }
+
         try {
-          const cqlResult = parseCql2Text(request.query.filter, {
-            startParamIndex: paramIndex,
-            geometryColumn: layer.geometry_column,
-            srid: layer.srid,
-            allowedColumns,
-          })
+          let cqlResult
+          if (filterLang === 'cql2-json') {
+            const jsonExpr = JSON.parse(request.query.filter)
+            cqlResult = parseCql2Json(jsonExpr, cqlOptions)
+          } else {
+            cqlResult = parseCql2Text(request.query.filter, cqlOptions)
+          }
           if (cqlResult.sql) {
             conditions.push(cqlResult.sql)
             params.push(...cqlResult.params)

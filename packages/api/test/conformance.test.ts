@@ -51,6 +51,7 @@ describe('GET /conformance', () => {
       'http://www.opengis.net/spec/cql2/1.0/req/basic-spatial-operators',
       'http://www.opengis.net/spec/cql2/1.0/req/spatial-operators',
       'http://www.opengis.net/spec/cql2/1.0/req/advanced-comparison-operators',
+      'http://www.opengis.net/spec/cql2/1.0/req/cql2-json',
     ]
 
     for (const uri of expected) {
