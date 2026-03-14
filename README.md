@@ -31,6 +31,9 @@ Sanson exposes geographic data stored in PostgreSQL/PostGIS via clean, modern RE
 - **Queryables** — discover filterable properties for each collection
 - **OGC pagination** — `self`, `next`, `prev`, `first`, `last` links in body and HTTP `Link` header + `X-Total-Count`
 - **Web admin UI** — dashboard, workspace and layer management, data import, interactive map and table views with CQL2 filter
+- **Layer settings** — configure description, attribution, datetime column, exposed fields (column visibility + aliasing), and style directly from the admin UI
+- **Layer style & legend** — single color, categorized (unique values), or graduated (numeric ranges) styling with auto-classification, color palettes, and live map legend
+- **GeoJSON export** — download any layer as a GeoJSON file, respecting exposed fields configuration
 - **API Explorer** — interactive API documentation powered by [Scalar](https://scalar.com), built into the admin UI
 - **Workspaces** — organize layers by theme or project
 - **Vector tiles (MVT)** — Mapbox Vector Tiles via `ST_AsMVT` at `/collections/{id}/tiles/{z}/{x}/{y}.pbf`
@@ -104,11 +107,14 @@ GET /collections/{id}/items                  Features with pagination, bbox, dat
 GET /collections/{id}/items/{fid}            Single feature by ID
 GET /collections/{id}/queryables             Queryable properties (JSON Schema)
 GET /collections/{id}/tiles/{z}/{x}/{y}.pbf  Mapbox Vector Tile (MVT)
+GET /collections/{id}/style                  Collection style configuration
 GET /api                                     OpenAPI 3.0 specification
 GET /health                                  Database connectivity check
 POST /api/admin/import                       Import a GeoJSON file (async, returns 202)
 GET  /api/admin/jobs                         List import jobs (status, progress, history)
 GET  /api/admin/jobs/:id                     Get a specific job status
+GET  /api/admin/layers/:id/export            Export layer as GeoJSON
+GET  /api/admin/layers/:id/classify          Auto-classify a column for styling
 ```
 
 ---
@@ -129,6 +135,7 @@ sanson/
 ├── scripts/
 │   └── init.sql    Database initialization
 ├── data/           Test datasets
+├── docs/           VitePress documentation (deployed to GitHub Pages)
 └── SPECS.md        Full project specifications
 ```
 
