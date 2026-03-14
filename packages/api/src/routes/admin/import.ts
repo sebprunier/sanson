@@ -17,6 +17,7 @@ interface GeoJsonFeatureCollection {
 }
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR ?? './uploads'
+const CSV_EXTENSIONS = ['.csv']
 
 export async function adminImportRoutes(
   app: FastifyInstance,
@@ -26,8 +27,9 @@ export async function adminImportRoutes(
   app.post('/api/admin/import', {
     schema: {
       tags: ['Admin'],
-      summary: 'Import a GeoJSON file',
-      description: 'Queue an asynchronous import of a GeoJSON file into a new or existing layer',
+      summary: 'Import a data file',
+      description:
+        'Queue an asynchronous import of a GeoJSON or CSV file into a new or existing layer',
       consumes: ['multipart/form-data'],
     },
     handler: async (request, reply) => {
@@ -36,6 +38,9 @@ export async function adminImportRoutes(
       let workspaceId: string | undefined
       let layerName: string | undefined
       let srid = 4326
+      let separator: string | undefined
+      let longitudeColumn: string | undefined
+      let latitudeColumn: string | undefined
       let fileBuffer: Buffer | undefined
       let sourceFileName: string | undefined
 
@@ -44,6 +49,9 @@ export async function adminImportRoutes(
           if (part.fieldname === 'workspace_id') workspaceId = part.value as string
           if (part.fieldname === 'layer_name') layerName = part.value as string
           if (part.fieldname === 'srid') srid = parseInt(part.value as string, 10) || 4326
+          if (part.fieldname === 'separator') separator = part.value as string
+          if (part.fieldname === 'longitude') longitudeColumn = part.value as string
+          if (part.fieldname === 'latitude') latitudeColumn = part.value as string
         } else if (part.type === 'file' && part.fieldname === 'file') {
           sourceFileName = part.filename
           fileBuffer = await part.toBuffer()
@@ -59,48 +67,8 @@ export async function adminImportRoutes(
         }
       }
 
-      // Decompress gzip if needed
-      const isGzip =
-        sourceFileName?.endsWith('.gz') || (fileBuffer[0] === 0x1f && fileBuffer[1] === 0x8b)
-      if (isGzip) {
-        try {
-          fileBuffer = gunzipSync(fileBuffer)
-        } catch {
-          reply.status(400)
-          return {
-            statusCode: 400,
-            error: 'Bad Request',
-            message: 'Failed to decompress gzip file',
-          }
-        }
-      }
-
-      // Validate GeoJSON structure
-      let geojson: GeoJsonFeatureCollection
-      try {
-        geojson = JSON.parse(fileBuffer.toString('utf-8'))
-      } catch {
-        reply.status(400)
-        return { statusCode: 400, error: 'Bad Request', message: 'Invalid JSON file' }
-      }
-
-      if (geojson.type !== 'FeatureCollection' || !Array.isArray(geojson.features)) {
-        reply.status(400)
-        return {
-          statusCode: 400,
-          error: 'Bad Request',
-          message: 'File must be a GeoJSON FeatureCollection',
-        }
-      }
-
-      if (geojson.features.length === 0) {
-        reply.status(400)
-        return {
-          statusCode: 400,
-          error: 'Bad Request',
-          message: 'FeatureCollection has no features',
-        }
-      }
+      // Detect format from file extension
+      const isCsv = CSV_EXTENSIONS.some((ext) => sourceFileName?.toLowerCase().endsWith(ext))
 
       // Verify workspace exists
       const { rows: wsRows } = await options.db.query(
@@ -121,18 +89,81 @@ export async function adminImportRoutes(
         }
       }
 
+      let totalFeatures: number
+
+      if (isCsv) {
+        // CSV validation: count data rows
+        const text = fileBuffer.toString('utf-8')
+        const lines = text.split(/\r?\n/).filter((l) => l.trim() !== '')
+        if (lines.length < 2) {
+          reply.status(400)
+          return {
+            statusCode: 400,
+            error: 'Bad Request',
+            message: 'CSV file must have a header row and at least one data row',
+          }
+        }
+        totalFeatures = lines.length - 1 // exclude header
+      } else {
+        // GeoJSON validation
+        // Decompress gzip if needed
+        const isGzip =
+          sourceFileName?.endsWith('.gz') || (fileBuffer[0] === 0x1f && fileBuffer[1] === 0x8b)
+        if (isGzip) {
+          try {
+            fileBuffer = gunzipSync(fileBuffer)
+          } catch {
+            reply.status(400)
+            return {
+              statusCode: 400,
+              error: 'Bad Request',
+              message: 'Failed to decompress gzip file',
+            }
+          }
+        }
+
+        let geojson: GeoJsonFeatureCollection
+        try {
+          geojson = JSON.parse(fileBuffer.toString('utf-8'))
+        } catch {
+          reply.status(400)
+          return { statusCode: 400, error: 'Bad Request', message: 'Invalid JSON file' }
+        }
+
+        if (geojson.type !== 'FeatureCollection' || !Array.isArray(geojson.features)) {
+          reply.status(400)
+          return {
+            statusCode: 400,
+            error: 'Bad Request',
+            message: 'File must be a GeoJSON FeatureCollection',
+          }
+        }
+
+        if (geojson.features.length === 0) {
+          reply.status(400)
+          return {
+            statusCode: 400,
+            error: 'Bad Request',
+            message: 'FeatureCollection has no features',
+          }
+        }
+
+        totalFeatures = geojson.features.length
+      }
+
       // Create import history record
       const { rows: historyRows } = await options.db.query<{ id: string }>(
         `INSERT INTO sanson_import_history (source_file, source_srid, target_srid, total_features, status)
          VALUES ($1, $2, $3, $4, 'pending')
          RETURNING id`,
-        [sourceFileName ?? layerName, srid, srid, geojson.features.length],
+        [sourceFileName ?? layerName, srid, srid, totalFeatures],
       )
       const importHistoryId = historyRows[0].id
 
       // Save file to disk
       mkdirSync(UPLOAD_DIR, { recursive: true })
-      const filePath = join(UPLOAD_DIR, `${importHistoryId}.geojson`)
+      const fileExt = isCsv ? '.csv' : '.geojson'
+      const filePath = join(UPLOAD_DIR, `${importHistoryId}${fileExt}`)
       writeFileSync(filePath, fileBuffer)
 
       // Queue the job
@@ -143,6 +174,16 @@ export async function adminImportRoutes(
         layerName,
         srid,
         sourceFileName: sourceFileName ?? layerName,
+        format: isCsv ? 'csv' : 'geojson',
+        ...(isCsv && (separator || longitudeColumn || latitudeColumn)
+          ? {
+              csvOptions: {
+                separator: separator ?? ';',
+                longitudeColumn: longitudeColumn ?? '',
+                latitudeColumn: latitudeColumn ?? '',
+              },
+            }
+          : {}),
       }
 
       const jobId = await options.boss.send(QUEUE_INGEST, payload)

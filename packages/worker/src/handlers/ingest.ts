@@ -2,6 +2,7 @@ import { readFileSync, unlinkSync } from 'fs'
 import { Pool } from 'pg'
 import { IngestJobPayload } from '../boss'
 import { updateProgress } from '../utils/progress'
+import { handleCsvIngest } from './ingest-csv'
 
 const BATCH_SIZE = 500
 
@@ -24,8 +25,12 @@ function inferSqlType(value: unknown): string {
   return 'TEXT'
 }
 
+const RESERVED_COLUMNS = new Set(['id', 'geom'])
+
 function sanitizeColumnName(name: string): string {
-  return name.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase()
+  let col = name.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase()
+  if (RESERVED_COLUMNS.has(col)) col = `_${col}`
+  return col
 }
 
 function toMultiType(geomType: string): string {
@@ -34,6 +39,11 @@ function toMultiType(geomType: string): string {
 }
 
 export async function handleIngest(db: Pool, payload: IngestJobPayload): Promise<void> {
+  // Dispatch to CSV handler if format is csv
+  if (payload.format === 'csv') {
+    return handleCsvIngest(db, payload)
+  }
+
   const { importHistoryId, filePath, workspaceId, layerName, srid, sourceFileName } = payload
 
   await updateProgress(db, importHistoryId, {
@@ -70,10 +80,23 @@ export async function handleIngest(db: Pool, payload: IngestJobPayload): Promise
   // Build table name
   const tableName = `data_${sanitizeColumnName(layerName)}`
 
+  // Check if table already exists (re-import)
+  const { rows: tableCheck } = await db.query(
+    `SELECT 1 FROM information_schema.tables WHERE table_name = $1`,
+    [tableName],
+  )
+  if (tableCheck.length > 0) {
+    // Re-import: drop and recreate to handle schema changes
+    await db.query(`DROP TABLE ${tableName}`)
+    await updateProgress(db, importHistoryId, {
+      log: { level: 'info', message: `Existing table ${tableName} dropped (re-import)` },
+    })
+  }
+
   // Create table
   const columnDefs = columns.map((c) => `${c.name} ${c.type}`).join(', ')
   await db.query(`
-    CREATE TABLE IF NOT EXISTS ${tableName} (
+    CREATE TABLE ${tableName} (
       id SERIAL PRIMARY KEY,
       geom GEOMETRY(${geometryType}, ${srid})
       ${columnDefs ? ', ' + columnDefs : ''}

@@ -11,6 +11,10 @@ export function Import() {
   const [layerName, setLayerName] = useState('')
   const [srid, setSrid] = useState('4326')
   const [file, setFile] = useState<File | null>(null)
+  const [isCsv, setIsCsv] = useState(false)
+  const [separator, setSeparator] = useState('')
+  const [longitudeCol, setLongitudeCol] = useState('')
+  const [latitudeCol, setLatitudeCol] = useState('')
   const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState<ImportAccepted | null>(null)
   const [currentJob, setCurrentJob] = useState<JobStatus | null>(null)
@@ -91,6 +95,8 @@ export function Import() {
     const f = e.target.files?.[0]
     if (!f) return
     setFile(f)
+    const csv = f.name.toLowerCase().endsWith('.csv')
+    setIsCsv(csv)
     if (!layerName) {
       setLayerName(
         f.name
@@ -117,6 +123,9 @@ export function Import() {
         layer_name: layerName,
         file,
         srid: parseInt(srid) || undefined,
+        separator: isCsv && separator ? separator : undefined,
+        longitude: isCsv && longitudeCol ? longitudeCol : undefined,
+        latitude: isCsv && latitudeCol ? latitudeCol : undefined,
       })
       setImportResult(res)
     } catch (err) {
@@ -130,6 +139,10 @@ export function Import() {
     setImportResult(null)
     setCurrentJob(null)
     setFile(null)
+    setIsCsv(false)
+    setSeparator('')
+    setLongitudeCol('')
+    setLatitudeCol('')
     setLayerName('')
     setError('')
     if (fileInputRef.current) fileInputRef.current.value = ''
@@ -253,15 +266,16 @@ export function Import() {
           className="bg-white rounded-lg border border-gray-200 p-6 max-w-lg space-y-5 mb-8"
         >
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">GeoJSON file</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Data file</label>
             <input
               ref={fileInputRef}
               type="file"
-              accept=".geojson,.json,.geojson.gz,.gz"
+              accept=".geojson,.json,.geojson.gz,.gz,.csv"
               onChange={handleFileChange}
               required
               className="w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
             />
+            <p className="text-xs text-gray-400 mt-1">GeoJSON, GeoJSON.gz, or CSV</p>
           </div>
 
           <div>
@@ -303,6 +317,52 @@ export function Import() {
             />
             <p className="text-xs text-gray-400 mt-1">Default: 4326 (WGS84)</p>
           </div>
+
+          {isCsv && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Separator</label>
+                <input
+                  type="text"
+                  value={separator}
+                  onChange={(e) => setSeparator(e.target.value)}
+                  placeholder="Auto-detect"
+                  maxLength={1}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+                <p className="text-xs text-gray-400 mt-1">Leave empty for auto-detection</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Longitude column
+                  </label>
+                  <input
+                    type="text"
+                    value={longitudeCol}
+                    onChange={(e) => setLongitudeCol(e.target.value)}
+                    placeholder="Auto-detect"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Latitude column
+                  </label>
+                  <input
+                    type="text"
+                    value={latitudeCol}
+                    onChange={(e) => setLatitudeCol(e.target.value)}
+                    placeholder="Auto-detect"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-gray-400 -mt-3">
+                Leave empty to auto-detect common names (longitude/lon/x, latitude/lat/y, etc.)
+              </p>
+            </>
+          )}
 
           {error && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">

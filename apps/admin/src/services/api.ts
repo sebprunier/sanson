@@ -196,11 +196,22 @@ export const api = {
     exportUrl: (id: string) => `/api/admin/layers/${id}/export`,
   },
 
-  import: (data: { workspace_id: string; layer_name: string; file: File; srid?: number }) => {
+  import: (data: {
+    workspace_id: string
+    layer_name: string
+    file: File
+    srid?: number
+    separator?: string
+    longitude?: string
+    latitude?: string
+  }) => {
     const form = new FormData()
     form.append('workspace_id', data.workspace_id)
     form.append('layer_name', data.layer_name)
     if (data.srid) form.append('srid', String(data.srid))
+    if (data.separator) form.append('separator', data.separator)
+    if (data.longitude) form.append('longitude', data.longitude)
+    if (data.latitude) form.append('latitude', data.latitude)
     form.append('file', data.file)
     return requestAccepted<ImportAccepted>('/api/admin/import', {
       method: 'POST',

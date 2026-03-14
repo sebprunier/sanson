@@ -143,12 +143,15 @@ POST /api/admin/import
 
 Multipart form data with the following fields:
 
-| Field          | Type   | Required | Description                                              |
-| -------------- | ------ | -------- | -------------------------------------------------------- |
-| `file`         | file   | Yes      | GeoJSON file (`.geojson`, `.json`, `.geojson.gz`, `.gz`) |
-| `workspace_id` | string | Yes      | Target workspace UUID                                    |
-| `layer_name`   | string | Yes      | Name for the new layer                                   |
-| `srid`         | number | No       | Source SRID (default: 4326)                              |
+| Field          | Type   | Required | Description                                                         |
+| -------------- | ------ | -------- | ------------------------------------------------------------------- |
+| `file`         | file   | Yes      | GeoJSON (`.geojson`, `.json`, `.geojson.gz`, `.gz`) or CSV (`.csv`) |
+| `workspace_id` | string | Yes      | Target workspace UUID                                               |
+| `layer_name`   | string | Yes      | Name for the new layer                                              |
+| `srid`         | number | No       | Source SRID (default: 4326)                                         |
+| `separator`    | string | No       | CSV only — column separator (auto-detected if omitted)              |
+| `longitude`    | string | No       | CSV only — longitude column name (auto-detected if omitted)         |
+| `latitude`     | string | No       | CSV only — latitude column name (auto-detected if omitted)          |
 
 **Response (202 Accepted):**
 
