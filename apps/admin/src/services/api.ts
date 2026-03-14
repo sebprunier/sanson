@@ -141,6 +141,7 @@ export const api = {
     schema: (id: string) => request<LayerSchema>(`/api/admin/layers/${id}/schema`),
     history: (id: string) => request<ImportHistory[]>(`/api/admin/layers/${id}/history`),
     delete: (id: string) => request<void>(`/api/admin/layers/${id}`, { method: 'DELETE' }),
+    exportUrl: (id: string) => `/api/admin/layers/${id}/export`,
   },
 
   import: (data: { workspace_id: string; layer_name: string; file: File; srid?: number }) => {

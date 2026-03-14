@@ -371,6 +371,60 @@ export async function adminLayersRoutes(
     },
   })
 
+  // GET /api/admin/layers/:id/export
+  app.get<{ Params: { id: string } }>('/api/admin/layers/:id/export', {
+    schema: {
+      tags: ['Admin'],
+      summary: 'Export layer as GeoJSON file',
+      params: {
+        type: 'object',
+        properties: { id: { type: 'string' } },
+        required: ['id'],
+      },
+    },
+    handler: async (request, reply) => {
+      const { rows: layerRows } = await options.db.query<LayerRow>(
+        `${LAYER_SELECT} WHERE l.id = $1`,
+        [request.params.id],
+      )
+      if (layerRows.length === 0) {
+        reply.status(404)
+        return { statusCode: 404, error: 'Not Found', message: 'Layer not found' }
+      }
+      const layer = layerRows[0]
+
+      const geomExpr =
+        layer.srid === 4326 ? layer.geometry_column : `ST_Transform(${layer.geometry_column}, 4326)`
+
+      const { rows: features } = await options.db.query<{
+        id: number
+        geojson: object
+        properties: Record<string, unknown>
+      }>(
+        `SELECT ${layer.id_column} AS id,
+                ST_AsGeoJSON(${geomExpr})::json AS geojson,
+                to_jsonb(t.*) - '${layer.id_column}' - '${layer.geometry_column}' AS properties
+         FROM ${layer.table_name} t
+         ORDER BY ${layer.id_column}`,
+      )
+
+      const featureCollection = {
+        type: 'FeatureCollection',
+        features: features.map((f) => ({
+          type: 'Feature',
+          id: f.id,
+          geometry: f.geojson,
+          properties: f.properties,
+        })),
+      }
+
+      const filename = `${layer.workspace_name}_${layer.name}.geojson`
+      reply.header('Content-Type', 'application/geo+json')
+      reply.header('Content-Disposition', `attachment; filename="${filename}"`)
+      return featureCollection
+    },
+  })
+
   // DELETE /api/admin/layers/:id
   app.delete<{ Params: { id: string } }>('/api/admin/layers/:id', {
     schema: {

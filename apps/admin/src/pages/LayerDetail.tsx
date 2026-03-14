@@ -58,6 +58,14 @@ export function LayerDetail() {
             {layer.feature_count?.toLocaleString() ?? 0} features &middot; SRID {layer.srid}
           </p>
         </div>
+        <a
+          href={api.layers.exportUrl(layer.id)}
+          download
+          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary-700 border border-primary-300 rounded-lg hover:bg-primary-50 transition-colors"
+        >
+          <DownloadIcon />
+          Export GeoJSON
+        </a>
       </div>
 
       <div className="flex gap-1 mb-4 border-b border-gray-200">
@@ -431,6 +439,24 @@ function SchemaView({ layerId }: { layerId: string }) {
         </table>
       </div>
     </div>
+  )
+}
+
+function DownloadIcon() {
+  return (
+    <svg
+      className="w-4 h-4"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={1.5}
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3"
+      />
+    </svg>
   )
 }
 
