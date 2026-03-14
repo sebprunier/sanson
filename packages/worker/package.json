@@ -9,8 +9,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "build": "tsc",
-    "test": "vitest run"
+    "build": "tsc"
   },
   "dependencies": {
     "pg": "^8.0.0",
