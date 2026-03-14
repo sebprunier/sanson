@@ -35,10 +35,12 @@ The `filter-lang` parameter is optional — `cql2-text` is the default (and curr
 
 ### Text
 
-| Operator | Example                                |
-| -------- | -------------------------------------- |
-| `LIKE`   | `name LIKE 'Par%'` (case-sensitive)    |
-| `ILIKE`  | `name ILIKE 'par%'` (case-insensitive) |
+| Operator    | Example                                |
+| ----------- | -------------------------------------- |
+| `LIKE`      | `name LIKE 'Par%'` (case-sensitive)    |
+| `ILIKE`     | `name ILIKE 'par%'` (case-insensitive) |
+| `NOT LIKE`  | `name NOT LIKE 'test%'` (negated)      |
+| `NOT ILIKE` | `name NOT ILIKE '%paris%'` (negated)   |
 
 Use `%` as a wildcard for zero or more characters.
 
@@ -51,9 +53,19 @@ Use `%` as a wildcard for zero or more characters.
 
 ### List
 
-| Operator | Example                               |
-| -------- | ------------------------------------- |
-| `IN`     | `type IN ('city', 'town', 'village')` |
+| Operator | Example                                |
+| -------- | -------------------------------------- |
+| `IN`     | `type IN ('city', 'town', 'village')`  |
+| `NOT IN` | `status NOT IN ('closed', 'archived')` |
+
+### Range
+
+| Operator      | Example                             |
+| ------------- | ----------------------------------- |
+| `BETWEEN`     | `population BETWEEN 1000 AND 50000` |
+| `NOT BETWEEN` | `elevation NOT BETWEEN 0 AND 100`   |
+
+`BETWEEN` works with both numbers and strings.
 
 ### Spatial
 
@@ -62,6 +74,11 @@ Use `%` as a wildcard for zero or more characters.
 | `S_INTERSECTS` | Geometry intersects the given geometry |
 | `S_WITHIN`     | Geometry is within the given geometry  |
 | `S_CONTAINS`   | Geometry contains the given geometry   |
+| `S_TOUCHES`    | Geometries touch at their boundaries   |
+| `S_CROSSES`    | Geometries cross each other            |
+| `S_OVERLAPS`   | Geometries overlap                     |
+| `S_EQUALS`     | Geometries are spatially equal         |
+| `S_DISJOINT`   | Geometries are spatially disjoint      |
 
 Spatial operators use WKT geometry literals:
 
@@ -69,6 +86,7 @@ Spatial operators use WKT geometry literals:
 S_INTERSECTS(geom, POINT(2.35 48.85))
 S_WITHIN(geom, POLYGON((2.2 48.8, 2.5 48.8, 2.5 49.0, 2.2 49.0, 2.2 48.8)))
 S_CONTAINS(geom, POINT(2.35 48.85))
+S_DISJOINT(geom, POLYGON((0 0, 1 0, 1 1, 0 1, 0 0)))
 ```
 
 ## Examples

@@ -49,6 +49,7 @@ describe('GET /conformance', () => {
       'http://www.opengis.net/spec/cql2/1.0/req/cql2-text',
       'http://www.opengis.net/spec/cql2/1.0/req/basic-cql2',
       'http://www.opengis.net/spec/cql2/1.0/req/basic-spatial-operators',
+      'http://www.opengis.net/spec/cql2/1.0/req/spatial-operators',
       'http://www.opengis.net/spec/cql2/1.0/req/advanced-comparison-operators',
     ]
 

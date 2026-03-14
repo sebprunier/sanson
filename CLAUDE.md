@@ -82,7 +82,7 @@ pnpm --filter @sanson/admin e2e:headed      # same, with visible browser
 - **pg-boss job queue** — PostgreSQL-based async workers via pg-boss v10. `NODE_MODE` env var controls startup: `api` (HTTP only), `worker` (pg-boss only), `all` (both, default). Requires explicit `createQueue()` before `send()`/`work()`. Worker handler receives an array: `async ([job]) =>`.
 - **Geometry type promotion** — always promotes to Multi variant (`MultiPolygon`, `MultiLineString`, etc.) via `toMultiType()` and wraps inserts with `ST_Multi()` to handle mixed single/multi geometries in the same GeoJSON file.
 - **Layer deletion** — `sanson_import_history.layer_id` FK uses `ON DELETE CASCADE`. DELETE handler also drops the associated `data_*` PostGIS table.
-- **CQL2 Text parser** — recursive descent parser in `packages/api/src/cql2.ts`, outputs parameterized SQL. Validates column names against `information_schema.columns`.
+- **CQL2 Text parser** — recursive descent parser in `packages/api/src/cql2.ts`, outputs parameterized SQL. Validates column names against `information_schema.columns`. Supports: comparison, logic (AND/OR/NOT), text (LIKE/ILIKE/NOT LIKE/NOT ILIKE), null (IS NULL/IS NOT NULL), list (IN/NOT IN), range (BETWEEN/NOT BETWEEN), and all CQL2 spatial functions (S_INTERSECTS, S_WITHIN, S_CONTAINS, S_TOUCHES, S_CROSSES, S_OVERLAPS, S_EQUALS, S_DISJOINT).
 - **OGC datetime filter** — `?datetime=` supports instant, interval, and open-ended bounds (`..`). Requires `datetime_column` to be configured on the layer.
 - **Lat/lon/radius shortcuts** — non-standard convenience params: `?lat=&lon=` for point intersection, `?lat=&lon=&radius=` for radius search (meters, via `::geography` cast). Combinable with all other filters.
 - **OGC pagination** — `first`/`last`/`next`/`prev` links in body + `Link` header + `X-Total-Count`. All query params (bbox, datetime, lat/lon/radius, filter) are preserved in pagination links.
@@ -112,7 +112,6 @@ pnpm --filter @sanson/admin e2e:headed      # same, with visible browser
 
 - CQL2 JSON encoding (currently only CQL2 Text)
 - CQL2 Temporal operators
-- CQL2 Spatial full (beyond S_INTERSECTS, S_WITHIN, S_CONTAINS)
 - CRS by Reference (content negotiation for coordinate systems)
 
 ### 4. OGC CITE validation

@@ -7,7 +7,9 @@
  * - Text: LIKE, ILIKE
  * - Null: IS NULL, IS NOT NULL
  * - List: IN ('val1', 'val2', ...)
- * - Spatial: S_INTERSECTS, S_WITHIN, S_CONTAINS
+ * - Spatial: S_INTERSECTS, S_WITHIN, S_CONTAINS, S_TOUCHES, S_CROSSES, S_OVERLAPS, S_EQUALS, S_DISJOINT
+ * - Range: BETWEEN x AND y, NOT BETWEEN x AND y
+ * - Negated: NOT IN, NOT LIKE, NOT ILIKE
  */
 
 export interface CqlResult {
@@ -39,6 +41,12 @@ const KEYWORDS = new Set([
   'S_INTERSECTS',
   'S_WITHIN',
   'S_CONTAINS',
+  'S_TOUCHES',
+  'S_CROSSES',
+  'S_OVERLAPS',
+  'S_EQUALS',
+  'S_DISJOINT',
+  'BETWEEN',
 ])
 
 const OPERATORS = ['<>', '<=', '>=', '=', '<', '>']
@@ -233,11 +241,8 @@ class Parser {
       return `(${expr})`
     }
 
-    // Spatial functions: S_INTERSECTS, S_WITHIN, S_CONTAINS
-    if (
-      token?.type === 'keyword' &&
-      ['S_INTERSECTS', 'S_WITHIN', 'S_CONTAINS'].includes((token as { value: string }).value)
-    ) {
+    // Spatial functions
+    if (token?.type === 'keyword' && (token as { value: string }).value.startsWith('S_')) {
       return this.parseSpatialFunction()
     }
 
@@ -267,23 +272,40 @@ class Parser {
       return `${column} IS NULL`
     }
 
+    // NOT IN / NOT LIKE / NOT ILIKE / NOT BETWEEN
+    if (next?.type === 'keyword' && (next as { value: string }).value === 'NOT') {
+      this.advance()
+      const afterNot = this.peek()
+      if (afterNot?.type === 'keyword' && (afterNot as { value: string }).value === 'IN') {
+        this.advance()
+        return `${column} NOT IN (${this.parseInList()})`
+      }
+      if (
+        afterNot?.type === 'keyword' &&
+        ['LIKE', 'ILIKE'].includes((afterNot as { value: string }).value)
+      ) {
+        const op = (this.advance() as { value: string }).value
+        const val = this.parseValue()
+        this.params.push(val)
+        return `${column} NOT ${op} $${this.paramIndex++}`
+      }
+      if (afterNot?.type === 'keyword' && (afterNot as { value: string }).value === 'BETWEEN') {
+        this.advance()
+        return this.parseBetween(column, true)
+      }
+      throw new Error(`Expected IN, LIKE, ILIKE, or BETWEEN after NOT`)
+    }
+
     // IN (...)
     if (next?.type === 'keyword' && (next as { value: string }).value === 'IN') {
       this.advance()
-      this.expect('lparen')
-      const values: string[] = []
-      while (true) {
-        const val = this.parseValue()
-        values.push(`$${this.paramIndex++}`)
-        this.params.push(val)
-        if (this.peek()?.type === 'comma') {
-          this.advance()
-        } else {
-          break
-        }
-      }
-      this.expect('rparen')
-      return `${column} IN (${values.join(', ')})`
+      return `${column} IN (${this.parseInList()})`
+    }
+
+    // BETWEEN x AND y
+    if (next?.type === 'keyword' && (next as { value: string }).value === 'BETWEEN') {
+      this.advance()
+      return this.parseBetween(column, false)
     }
 
     // LIKE / ILIKE
@@ -314,6 +336,35 @@ class Parser {
       if (token.value === 'FALSE') return false
     }
     throw new Error(`Expected value, got ${JSON.stringify(token)}`)
+  }
+
+  private parseInList(): string {
+    this.expect('lparen')
+    const values: string[] = []
+    while (true) {
+      const val = this.parseValue()
+      values.push(`$${this.paramIndex++}`)
+      this.params.push(val)
+      if (this.peek()?.type === 'comma') {
+        this.advance()
+      } else {
+        break
+      }
+    }
+    this.expect('rparen')
+    return values.join(', ')
+  }
+
+  private parseBetween(column: string, negated: boolean): string {
+    const low = this.parseValue()
+    this.params.push(low)
+    const lowParam = `$${this.paramIndex++}`
+    this.expect('keyword', 'AND')
+    const high = this.parseValue()
+    this.params.push(high)
+    const highParam = `$${this.paramIndex++}`
+    const op = negated ? 'NOT BETWEEN' : 'BETWEEN'
+    return `${column} ${op} ${lowParam} AND ${highParam}`
   }
 
   private parseSpatialFunction(): string {
@@ -358,6 +409,11 @@ const spatialFuncMap: Record<string, string> = {
   S_INTERSECTS: 'ST_Intersects',
   S_WITHIN: 'ST_Within',
   S_CONTAINS: 'ST_Contains',
+  S_TOUCHES: 'ST_Touches',
+  S_CROSSES: 'ST_Crosses',
+  S_OVERLAPS: 'ST_Overlaps',
+  S_EQUALS: 'ST_Equals',
+  S_DISJOINT: 'ST_Disjoint',
 }
 
 export interface CqlParseOptions {

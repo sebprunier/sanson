@@ -46,6 +46,7 @@ Declares the OGC conformance classes supported by Sanson:
 | CQL2 Text                | Implemented |
 | CQL2 Basic               | Implemented |
 | CQL2 Basic Spatial       | Implemented |
+| CQL2 Spatial Functions   | Implemented |
 | CQL2 Advanced Comparison | Implemented |
 | Tiles Core               | Implemented |
 | Tileset                  | Implemented |

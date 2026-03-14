@@ -138,6 +138,73 @@ describe('CQL2 Text parser', () => {
     })
   })
 
+  describe('BETWEEN operator', () => {
+    it('BETWEEN', () => {
+      const r = parse('population BETWEEN 100 AND 1000')
+      expect(r.sql).toBe('population BETWEEN $1 AND $2')
+      expect(r.params).toEqual([100, 1000])
+    })
+
+    it('NOT BETWEEN', () => {
+      const r = parse('population NOT BETWEEN 100 AND 1000')
+      expect(r.sql).toBe('population NOT BETWEEN $1 AND $2')
+      expect(r.params).toEqual([100, 1000])
+    })
+
+    it('BETWEEN with strings', () => {
+      const r = parse("name BETWEEN 'A' AND 'M'")
+      expect(r.sql).toBe('name BETWEEN $1 AND $2')
+      expect(r.params).toEqual(['A', 'M'])
+    })
+  })
+
+  describe('negated operators', () => {
+    it('NOT IN', () => {
+      const r = parse("status NOT IN ('closed','archived')")
+      expect(r.sql).toBe('status NOT IN ($1, $2)')
+      expect(r.params).toEqual(['closed', 'archived'])
+    })
+
+    it('NOT LIKE', () => {
+      const r = parse("name NOT LIKE 'test%'")
+      expect(r.sql).toBe('name NOT LIKE $1')
+      expect(r.params).toEqual(['test%'])
+    })
+
+    it('NOT ILIKE', () => {
+      const r = parse("name NOT ILIKE '%paris%'")
+      expect(r.sql).toBe('name NOT ILIKE $1')
+      expect(r.params).toEqual(['%paris%'])
+    })
+  })
+
+  describe('additional spatial operators', () => {
+    it('S_TOUCHES', () => {
+      const r = parse("S_TOUCHES(geom,'POLYGON((0 0,1 0,1 1,0 1,0 0))')")
+      expect(r.sql).toBe('ST_Touches(geom, ST_Transform(ST_GeomFromText($1, 4326), 4326))')
+    })
+
+    it('S_CROSSES', () => {
+      const r = parse("S_CROSSES(geom,'LINESTRING(0 0,1 1)')")
+      expect(r.sql).toBe('ST_Crosses(geom, ST_Transform(ST_GeomFromText($1, 4326), 4326))')
+    })
+
+    it('S_OVERLAPS', () => {
+      const r = parse("S_OVERLAPS(geom,'POLYGON((0 0,1 0,1 1,0 1,0 0))')")
+      expect(r.sql).toBe('ST_Overlaps(geom, ST_Transform(ST_GeomFromText($1, 4326), 4326))')
+    })
+
+    it('S_EQUALS', () => {
+      const r = parse("S_EQUALS(geom,'POINT(2.35 48.85)')")
+      expect(r.sql).toBe('ST_Equals(geom, ST_Transform(ST_GeomFromText($1, 4326), 4326))')
+    })
+
+    it('S_DISJOINT', () => {
+      const r = parse("S_DISJOINT(geom,'POLYGON((0 0,1 0,1 1,0 1,0 0))')")
+      expect(r.sql).toBe('ST_Disjoint(geom, ST_Transform(ST_GeomFromText($1, 4326), 4326))')
+    })
+  })
+
   describe('paramIndex offset', () => {
     it('starts from given index', () => {
       const r = parse("name='test'", { ...defaultOptions, startParamIndex: 5 })
