@@ -5,6 +5,7 @@ import { Workspaces } from './pages/Workspaces'
 import { Layers } from './pages/Layers'
 import { LayerDetail } from './pages/LayerDetail'
 import { Import } from './pages/Import'
+import { Jobs } from './pages/Jobs'
 import { ApiExplorer } from './pages/ApiExplorer'
 
 export default function App() {
@@ -17,6 +18,7 @@ export default function App() {
           <Route path="layers" element={<Layers />} />
           <Route path="layers/:id" element={<LayerDetail />} />
           <Route path="import" element={<Import />} />
+          <Route path="jobs" element={<Jobs />} />
           <Route path="api-explorer" element={<ApiExplorer />} />
         </Route>
       </Routes>

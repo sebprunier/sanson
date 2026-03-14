@@ -5,6 +5,7 @@ const links = [
   { to: '/workspaces', label: 'Workspaces', icon: WorkspacesIcon },
   { to: '/layers', label: 'Layers', icon: LayersIcon },
   { to: '/import', label: 'Import', icon: ImportIcon },
+  { to: '/jobs', label: 'Jobs', icon: JobsIcon },
   { to: '/api-explorer', label: 'API Explorer', icon: ApiIcon },
 ]
 
@@ -108,6 +109,24 @@ function ImportIcon() {
         strokeLinecap="round"
         strokeLinejoin="round"
         d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"
+      />
+    </svg>
+  )
+}
+
+function JobsIcon() {
+  return (
+    <svg
+      className="w-5 h-5"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={1.5}
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 0 1 0 3.75H5.625a1.875 1.875 0 0 1 0-3.75Z"
       />
     </svg>
   )

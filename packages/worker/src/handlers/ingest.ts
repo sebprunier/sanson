@@ -28,6 +28,11 @@ function sanitizeColumnName(name: string): string {
   return name.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase()
 }
 
+function toMultiType(geomType: string): string {
+  if (geomType.startsWith('Multi')) return geomType
+  return `Multi${geomType}`
+}
+
 export async function handleIngest(db: Pool, payload: IngestJobPayload): Promise<void> {
   const { importHistoryId, filePath, workspaceId, layerName, srid, sourceFileName } = payload
 
@@ -53,7 +58,8 @@ export async function handleIngest(db: Pool, payload: IngestJobPayload): Promise
   ])
 
   // Detect geometry type and columns from first feature
-  const geometryType = geojson.features[0].geometry.type
+  // Always promote to Multi variant to handle mixed Polygon/MultiPolygon etc.
+  const geometryType = toMultiType(geojson.features[0].geometry.type)
   const firstProps = geojson.features[0].properties || {}
   const columns = Object.entries(firstProps).map(([key, value]) => ({
     name: sanitizeColumnName(key),
@@ -94,7 +100,7 @@ export async function handleIngest(db: Pool, payload: IngestJobPayload): Promise
 
     await db.query(
       `INSERT INTO ${tableName} (geom, ${colNames.join(', ')})
-       VALUES (ST_SetSRID(ST_GeomFromGeoJSON($1), ${srid}), ${placeholders.join(', ')})`,
+       VALUES (ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON($1), ${srid})), ${placeholders.join(', ')})`,
       [JSON.stringify(feature.geometry), ...colValues],
     )
     insertedCount++
