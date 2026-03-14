@@ -39,6 +39,11 @@ interface LayerRow {
   temporal_extent: (string | null)[] | null
 }
 
+interface ExposedField {
+  source: string
+  alias?: string
+}
+
 interface LayerConfig {
   workspace_name: string
   name: string
@@ -46,6 +51,7 @@ interface LayerConfig {
   geometry_column: string
   id_column: string
   datetime_column: string | null
+  exposed_fields: ExposedField[] | null
   srid: number
 }
 
@@ -155,7 +161,7 @@ async function resolveLayer(
   layerName: string,
 ): Promise<LayerConfig | null> {
   const { rows } = await db.query<LayerConfig>(
-    `SELECT w.name AS workspace_name, l.name, l.table_name, l.geometry_column, l.id_column, l.datetime_column, l.srid
+    `SELECT w.name AS workspace_name, l.name, l.table_name, l.geometry_column, l.id_column, l.datetime_column, l.exposed_fields, l.srid
      FROM sanson_layers l
      JOIN sanson_workspaces w ON w.id = l.workspace_id
      WHERE w.name = $1 AND l.name = $2`,
@@ -168,6 +174,52 @@ function parseBbox(bbox: string): [number, number, number, number] | null {
   const parts = bbox.split(',').map(Number)
   if (parts.length !== 4 || parts.some(isNaN)) return null
   return parts as [number, number, number, number]
+}
+
+/**
+ * Build a SQL expression for properties based on exposed_fields.
+ * When exposed_fields is null, returns all columns via to_jsonb minus id/geom.
+ * When set, builds a jsonb_build_object with only the specified columns (with optional aliases).
+ */
+function buildPropertiesExpr(layer: LayerConfig): string {
+  if (!layer.exposed_fields || layer.exposed_fields.length === 0) {
+    return `to_jsonb(t.*) - '${layer.id_column}' - '${layer.geometry_column}'`
+  }
+  const pairs = layer.exposed_fields
+    .map((f) => `'${f.alias ?? f.source}', t."${f.source}"`)
+    .join(', ')
+  return `jsonb_build_object(${pairs})`
+}
+
+/**
+ * Get the list of column names exposed by a layer.
+ * When exposed_fields is null, queries information_schema for all non-id/non-geom columns.
+ * Returns [{source, alias}] entries.
+ */
+async function getExposedColumns(
+  db: Pool,
+  layer: LayerConfig,
+): Promise<{ source: string; alias: string; dataType: string }[]> {
+  if (layer.exposed_fields && layer.exposed_fields.length > 0) {
+    // Get data types for the exposed columns
+    const { rows: allCols } = await db.query<{ column_name: string; data_type: string }>(
+      `SELECT column_name, data_type FROM information_schema.columns WHERE table_name = $1`,
+      [layer.table_name],
+    )
+    const typeMap = new Map(allCols.map((c) => [c.column_name, c.data_type]))
+    return layer.exposed_fields.map((f) => ({
+      source: f.source,
+      alias: f.alias ?? f.source,
+      dataType: typeMap.get(f.source) ?? 'text',
+    }))
+  }
+  const { rows } = await db.query<{ column_name: string; data_type: string }>(
+    `SELECT column_name, data_type FROM information_schema.columns
+     WHERE table_name = $1 AND column_name NOT IN ($2, $3)
+     ORDER BY ordinal_position`,
+    [layer.table_name, layer.id_column, layer.geometry_column],
+  )
+  return rows.map((c) => ({ source: c.column_name, alias: c.column_name, dataType: c.data_type }))
 }
 
 // --- Routes ---
@@ -440,11 +492,12 @@ export async function collectionsRoutes(
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
 
       // CTE + RIGHT JOIN for results + total count in one query
+      const propsExpr = buildPropertiesExpr(layer)
       const sql = `
         WITH all_data AS (
           SELECT ${layer.id_column} AS id,
                  ST_AsGeoJSON(${geomExpr})::json AS geojson,
-                 to_jsonb(t.*) - '${layer.id_column}' - '${layer.geometry_column}' AS properties
+                 ${propsExpr} AS properties
           FROM ${layer.table_name} t
           ${whereClause}
         )
@@ -567,10 +620,11 @@ export async function collectionsRoutes(
       const geomExpr =
         layer.srid === 4326 ? layer.geometry_column : `ST_Transform(${layer.geometry_column}, 4326)`
 
+      const propsExpr = buildPropertiesExpr(layer)
       const { rows } = await options.db.query<FeatureRow>(
         `SELECT ${layer.id_column} AS id,
                 ST_AsGeoJSON(${geomExpr})::json AS geojson,
-                to_jsonb(t.*) - '${layer.id_column}' - '${layer.geometry_column}' AS properties
+                ${propsExpr} AS properties
          FROM ${layer.table_name} t
          WHERE ${layer.id_column} = $1`,
         [request.params.fid],
@@ -625,18 +679,7 @@ export async function collectionsRoutes(
 
       const collectionId = `${layer.workspace_name}:${layer.name}`
 
-      // Query column info from information_schema
-      const { rows: columns } = await options.db.query<{
-        column_name: string
-        data_type: string
-      }>(
-        `SELECT column_name, data_type
-         FROM information_schema.columns
-         WHERE table_name = $1
-           AND column_name NOT IN ($2, $3)
-         ORDER BY ordinal_position`,
-        [layer.table_name, layer.id_column, layer.geometry_column],
-      )
+      const exposedCols = await getExposedColumns(options.db, layer)
 
       const pgToJsonType: Record<string, { type: string }> = {
         integer: { type: 'integer' },
@@ -655,10 +698,10 @@ export async function collectionsRoutes(
       }
 
       const properties: Record<string, { type: string; title: string }> = {}
-      for (const col of columns) {
-        properties[col.column_name] = {
-          title: col.column_name,
-          ...(pgToJsonType[col.data_type] ?? { type: 'string' }),
+      for (const col of exposedCols) {
+        properties[col.alias] = {
+          title: col.alias,
+          ...(pgToJsonType[col.dataType] ?? { type: 'string' }),
         }
       }
 
@@ -716,15 +759,14 @@ export async function collectionsRoutes(
         return { statusCode: 400, error: 'Bad Request', message: 'Invalid tile coordinates' }
       }
 
-      // Get non-geometry, non-id columns for the tile properties
-      const { rows: columns } = await options.db.query<{ column_name: string }>(
-        `SELECT column_name FROM information_schema.columns
-         WHERE table_name = $1 AND column_name NOT IN ($2, $3)
-         ORDER BY ordinal_position`,
-        [layer.table_name, layer.id_column, layer.geometry_column],
-      )
+      // Get columns for tile properties (respects exposed_fields)
+      const exposedCols = await getExposedColumns(options.db, layer)
 
-      const propColumns = columns.map((c) => `"${c.column_name}"::text`).join(', ')
+      const propColumns = exposedCols
+        .map((c) =>
+          c.alias !== c.source ? `"${c.source}"::text AS "${c.alias}"` : `"${c.source}"::text`,
+        )
+        .join(', ')
       const propSelect = propColumns ? `, ${propColumns}` : ''
 
       const sql = `

@@ -660,3 +660,141 @@ describe('GET /collections/:collectionId/tiles/:z/:x/:y.pbf', () => {
     expect(response.statusCode).toBe(400)
   })
 })
+
+describe('exposed_fields filtering', () => {
+  let container: StartedPostgreSqlContainer
+
+  beforeAll(async () => {
+    container = await new PostgreSqlContainer('postgis/postgis:16-3.4').start()
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+    await db.query(initSql)
+
+    await db.query(
+      `INSERT INTO sanson_workspaces (id, name)
+       VALUES ('00000000-0000-0000-0000-000000000050', 'exposed')`,
+    )
+
+    await db.query(`
+      CREATE TABLE test_exposed (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100),
+        population INTEGER,
+        secret_code VARCHAR(50),
+        geom GEOMETRY(Point, 4326)
+      )
+    `)
+    await db.query(`CREATE INDEX idx_test_exposed_geom ON test_exposed USING GIST (geom)`)
+    await db.query(`
+      INSERT INTO test_exposed (name, population, secret_code, geom) VALUES
+        ('Paris',     2161000, 'SEC-75', ST_SetSRID(ST_MakePoint(2.35, 48.86), 4326)),
+        ('Lyon',       522969, 'SEC-69', ST_SetSRID(ST_MakePoint(4.83, 45.76), 4326))
+    `)
+
+    // Layer WITHOUT exposed_fields (null) — should expose all columns
+    await db.query(
+      `INSERT INTO sanson_layers (id, workspace_id, name, table_name, geometry_column, id_column, srid)
+       VALUES ('00000000-0000-0000-0000-000000000051', '00000000-0000-0000-0000-000000000050', 'all_fields', 'test_exposed', 'geom', 'id', 4326)`,
+    )
+
+    // Layer WITH exposed_fields — only name (aliased to "city") and population
+    await db.query(
+      `INSERT INTO sanson_layers (id, workspace_id, name, table_name, geometry_column, id_column, srid, exposed_fields)
+       VALUES ('00000000-0000-0000-0000-000000000052', '00000000-0000-0000-0000-000000000050', 'limited_fields', 'test_exposed', 'geom', 'id', 4326,
+               $1)`,
+      [JSON.stringify([{ source: 'name', alias: 'city' }, { source: 'population' }])],
+    )
+
+    await db.end()
+  })
+
+  afterAll(async () => {
+    await container.stop()
+  })
+
+  it('exposes all columns when exposed_fields is null', async () => {
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+    const app = buildApp(db)
+    const response = await app.inject({
+      method: 'GET',
+      url: '/collections/exposed:all_fields/items',
+    })
+    await app.close()
+
+    const body = response.json()
+    expect(response.statusCode).toBe(200)
+    const props = body.features[0].properties
+    expect(props).toHaveProperty('name')
+    expect(props).toHaveProperty('population')
+    expect(props).toHaveProperty('secret_code')
+  })
+
+  it('filters properties when exposed_fields is set', async () => {
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+    const app = buildApp(db)
+    const response = await app.inject({
+      method: 'GET',
+      url: '/collections/exposed:limited_fields/items',
+    })
+    await app.close()
+
+    const body = response.json()
+    expect(response.statusCode).toBe(200)
+    const props = body.features[0].properties
+    // "name" is aliased to "city"
+    expect(props).toHaveProperty('city')
+    expect(props).toHaveProperty('population')
+    // secret_code should NOT be exposed
+    expect(props).not.toHaveProperty('secret_code')
+    expect(props).not.toHaveProperty('name')
+  })
+
+  it('applies aliases in single feature endpoint', async () => {
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+    const app = buildApp(db)
+    const response = await app.inject({
+      method: 'GET',
+      url: '/collections/exposed:limited_fields/items/1',
+    })
+    await app.close()
+
+    expect(response.statusCode).toBe(200)
+    const body = response.json()
+    expect(body.properties).toHaveProperty('city')
+    expect(body.properties).not.toHaveProperty('secret_code')
+  })
+
+  it('filters queryables based on exposed_fields', async () => {
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+    const app = buildApp(db)
+    const response = await app.inject({
+      method: 'GET',
+      url: '/collections/exposed:limited_fields/queryables',
+    })
+    await app.close()
+
+    expect(response.statusCode).toBe(200)
+    const body = response.json()
+    // Should have geometry + city + population
+    expect(body.properties).toHaveProperty('geometry')
+    expect(body.properties).toHaveProperty('city')
+    expect(body.properties).toHaveProperty('population')
+    // secret_code and original "name" should NOT appear
+    expect(body.properties).not.toHaveProperty('secret_code')
+    expect(body.properties).not.toHaveProperty('name')
+  })
+
+  it('returns all queryables when exposed_fields is null', async () => {
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+    const app = buildApp(db)
+    const response = await app.inject({
+      method: 'GET',
+      url: '/collections/exposed:all_fields/queryables',
+    })
+    await app.close()
+
+    const body = response.json()
+    expect(body.properties).toHaveProperty('name')
+    expect(body.properties).toHaveProperty('population')
+    expect(body.properties).toHaveProperty('secret_code')
+  })
+})

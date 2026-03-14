@@ -446,6 +446,12 @@ function SchemaView({ layerId }: { layerId: string }) {
   )
 }
 
+interface FieldConfig {
+  source: string
+  alias: string
+  enabled: boolean
+}
+
 function SettingsView({ layer, onUpdate }: { layer: Layer; onUpdate: (l: Layer) => void }) {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [columns, setColumns] = useState<ColumnSchema[]>([])
@@ -453,16 +459,35 @@ function SettingsView({ layer, onUpdate }: { layer: Layer; onUpdate: (l: Layer) 
   const [description, setDescription] = useState(layer.description ?? '')
   const [attribution, setAttribution] = useState(layer.attribution ?? '')
   const [datetimeColumn, setDatetimeColumn] = useState(layer.datetime_column ?? '')
+  const [fields, setFields] = useState<FieldConfig[]>([])
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => {
     api.workspaces.list().then(setWorkspaces)
-    api.layers.schema(layer.id).then((data) => setColumns(data.columns))
-  }, [layer.id])
+    api.layers.schema(layer.id).then((data) => {
+      setColumns(data.columns)
+      // Build field config from schema + existing exposed_fields
+      const dataCols = data.columns.filter(
+        (c) => c.column !== layer.geometry_column && c.column !== layer.id_column,
+      )
+      const exposed = layer.exposed_fields
+      if (exposed && exposed.length > 0) {
+        const exposedMap = new Map(exposed.map((f) => [f.source, f.alias ?? f.source]))
+        setFields(
+          dataCols.map((c) => ({
+            source: c.column,
+            alias: exposedMap.get(c.column) ?? c.column,
+            enabled: exposedMap.has(c.column),
+          })),
+        )
+      } else {
+        setFields(dataCols.map((c) => ({ source: c.column, alias: c.column, enabled: true })))
+      }
+    })
+  }, [layer.id, layer.geometry_column, layer.id_column, layer.exposed_fields])
 
-  // Columns suitable for datetime filtering (timestamp, date, text types)
   const dateColumns = columns.filter(
     (c) =>
       c.type.includes('timestamp') ||
@@ -471,17 +496,31 @@ function SettingsView({ layer, onUpdate }: { layer: Layer; onUpdate: (l: Layer) 
       c.type === 'character varying',
   )
 
+  const allEnabled = fields.every((f) => f.enabled)
+  const noAliases = fields.every((f) => f.alias === f.source)
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSaving(true)
     setError('')
     setSaved(false)
     try {
+      // If all fields are enabled with no aliases, set exposed_fields to null
+      const exposedFields =
+        allEnabled && noAliases
+          ? null
+          : fields
+              .filter((f) => f.enabled)
+              .map((f) =>
+                f.alias !== f.source ? { source: f.source, alias: f.alias } : { source: f.source },
+              )
+
       const updated = await api.layers.update(layer.id, {
         workspace_id: workspaceId !== layer.workspace_id ? workspaceId : undefined,
         description: description || null,
         attribution: attribution || null,
         datetime_column: datetimeColumn || null,
+        exposed_fields: exposedFields,
       })
       onUpdate(updated)
       setSaved(true)
@@ -493,10 +532,18 @@ function SettingsView({ layer, onUpdate }: { layer: Layer; onUpdate: (l: Layer) 
     }
   }
 
+  const toggleField = (source: string) => {
+    setFields((prev) => prev.map((f) => (f.source === source ? { ...f, enabled: !f.enabled } : f)))
+  }
+
+  const setAlias = (source: string, alias: string) => {
+    setFields((prev) => prev.map((f) => (f.source === source ? { ...f, alias } : f)))
+  }
+
   return (
     <form
       onSubmit={handleSubmit}
-      className="bg-white rounded-lg border border-gray-200 p-6 max-w-lg space-y-5"
+      className="bg-white rounded-lg border border-gray-200 p-6 max-w-2xl space-y-5"
     >
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Workspace</label>
@@ -552,6 +599,53 @@ function SettingsView({ layer, onUpdate }: { layer: Layer; onUpdate: (l: Layer) 
         <p className="text-xs text-gray-400 mt-1">
           Enables the OGC <code>?datetime=</code> filter on this layer
         </p>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">Exposed fields</label>
+        <p className="text-xs text-gray-400 mb-3">
+          Choose which columns are exposed in the API. Uncheck a column to hide it. Set an alias to
+          rename it in the API response.
+        </p>
+        {fields.length > 0 ? (
+          <div className="border border-gray-200 rounded-lg overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr className="border-b border-gray-200">
+                  <th className="text-left px-3 py-2 font-medium text-gray-600 w-10">On</th>
+                  <th className="text-left px-3 py-2 font-medium text-gray-600">Column</th>
+                  <th className="text-left px-3 py-2 font-medium text-gray-600">Alias</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fields.map((f) => (
+                  <tr key={f.source} className="border-b border-gray-100 last:border-0">
+                    <td className="px-3 py-2">
+                      <input
+                        type="checkbox"
+                        checked={f.enabled}
+                        onChange={() => toggleField(f.source)}
+                        className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                      />
+                    </td>
+                    <td className="px-3 py-2 font-mono text-gray-700">{f.source}</td>
+                    <td className="px-3 py-2">
+                      <input
+                        type="text"
+                        value={f.alias}
+                        onChange={(e) => setAlias(f.source, e.target.value)}
+                        disabled={!f.enabled}
+                        className="w-full border border-gray-200 rounded px-2 py-1 text-sm disabled:opacity-40 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="animate-pulse h-20 bg-gray-100 rounded-lg" />
+        )}
       </div>
 
       {error && (

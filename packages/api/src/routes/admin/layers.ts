@@ -17,6 +17,7 @@ interface LayerRow {
   geometry_type: string | null
   id_column: string
   datetime_column: string | null
+  exposed_fields: ExposedField[] | null
   srid: number
   bbox: number[] | null
   feature_count: number | null
@@ -36,16 +37,32 @@ interface CreateLayerBody {
   srid?: number
 }
 
+interface ExposedField {
+  source: string
+  alias?: string
+}
+
 interface UpdateLayerBody {
   workspace_id?: string
   name?: string
   description?: string
   attribution?: string
   datetime_column?: string | null
+  exposed_fields?: ExposedField[] | null
   geometry_column?: string
   geometry_type?: string
   id_column?: string
   srid?: number
+}
+
+function buildExportPropertiesExpr(layer: LayerRow): string {
+  if (!layer.exposed_fields || layer.exposed_fields.length === 0) {
+    return `to_jsonb(t.*) - '${layer.id_column}' - '${layer.geometry_column}'`
+  }
+  const pairs = layer.exposed_fields
+    .map((f) => `'${f.alias ?? f.source}', t."${f.source}"`)
+    .join(', ')
+  return `jsonb_build_object(${pairs})`
 }
 
 const layerSchema = {
@@ -62,6 +79,15 @@ const layerSchema = {
     geometry_type: { type: 'string', nullable: true },
     id_column: { type: 'string' },
     datetime_column: { type: 'string', nullable: true },
+    exposed_fields: {
+      type: 'array',
+      nullable: true,
+      items: {
+        type: 'object',
+        properties: { source: { type: 'string' }, alias: { type: 'string' } },
+        required: ['source'],
+      },
+    },
     srid: { type: 'integer' },
     bbox: { type: 'array', nullable: true, items: { type: 'number' } },
     feature_count: { type: 'integer', nullable: true },
@@ -72,7 +98,7 @@ const layerSchema = {
 
 const LAYER_SELECT = `
   SELECT l.id, l.workspace_id, w.name AS workspace_name, l.name, l.description, l.attribution,
-         l.table_name, l.geometry_column, l.geometry_type, l.id_column, l.datetime_column, l.srid,
+         l.table_name, l.geometry_column, l.geometry_type, l.id_column, l.datetime_column, l.exposed_fields, l.srid,
          l.bbox, l.feature_count, l.created_at, l.updated_at
   FROM sanson_layers l
   JOIN sanson_workspaces w ON w.id = l.workspace_id
@@ -216,6 +242,15 @@ export async function adminLayersRoutes(
           description: { type: 'string', nullable: true },
           attribution: { type: 'string', nullable: true },
           datetime_column: { type: 'string', nullable: true },
+          exposed_fields: {
+            type: 'array',
+            nullable: true,
+            items: {
+              type: 'object',
+              properties: { source: { type: 'string' }, alias: { type: 'string' } },
+              required: ['source'],
+            },
+          },
           geometry_column: { type: 'string' },
           geometry_type: { type: 'string' },
           id_column: { type: 'string' },
@@ -245,6 +280,9 @@ export async function adminLayersRoutes(
       addField('description', b.description)
       addField('attribution', b.attribution)
       addField('datetime_column', b.datetime_column)
+      if (b.exposed_fields !== undefined) {
+        addField('exposed_fields', b.exposed_fields ? JSON.stringify(b.exposed_fields) : null)
+      }
       addField('geometry_column', b.geometry_column)
       addField('geometry_type', b.geometry_type)
       addField('id_column', b.id_column)
@@ -420,6 +458,7 @@ export async function adminLayersRoutes(
       const geomExpr =
         layer.srid === 4326 ? layer.geometry_column : `ST_Transform(${layer.geometry_column}, 4326)`
 
+      const propsExpr = buildExportPropertiesExpr(layer)
       const { rows: features } = await options.db.query<{
         id: number
         geojson: object
@@ -427,7 +466,7 @@ export async function adminLayersRoutes(
       }>(
         `SELECT ${layer.id_column} AS id,
                 ST_AsGeoJSON(${geomExpr})::json AS geojson,
-                to_jsonb(t.*) - '${layer.id_column}' - '${layer.geometry_column}' AS properties
+                ${propsExpr} AS properties
          FROM ${layer.table_name} t
          ORDER BY ${layer.id_column}`,
       )

@@ -173,6 +173,10 @@ GET /collections/{collectionId}/queryables
 
 Returns a JSON Schema describing the filterable properties of the collection. This enables GIS clients like QGIS to dynamically build filter UIs without prior knowledge of the data schema.
 
+::: tip
+If [exposed fields](/api/admin-endpoints#exposed-fields) are configured on the layer, only those columns appear in queryables, features, and vector tiles. Aliases are reflected in property names.
+:::
+
 ```json
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",

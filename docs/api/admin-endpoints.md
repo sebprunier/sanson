@@ -76,6 +76,36 @@ Returns full layer metadata including bounding box, feature count, geometry type
 PUT /api/admin/layers/{id}
 ```
 
+All fields are optional — only provided fields are updated.
+
+```json
+{
+  "workspace_id": "uuid",
+  "name": "new_name",
+  "description": "Updated description",
+  "attribution": "© OpenStreetMap contributors",
+  "datetime_column": "date_created",
+  "exposed_fields": [{ "source": "name", "alias": "city" }, { "source": "population" }]
+}
+```
+
+| Field             | Type           | Description                                                          |
+| ----------------- | -------------- | -------------------------------------------------------------------- |
+| `workspace_id`    | string         | Move the layer to a different workspace                              |
+| `name`            | string         | Rename the layer                                                     |
+| `description`     | string \| null | Layer description (set to `null` to clear)                           |
+| `attribution`     | string \| null | Data attribution text                                                |
+| `datetime_column` | string \| null | Column to use for OGC `?datetime=` temporal filtering                |
+| `exposed_fields`  | array \| null  | Columns to expose in the API (see [Exposed Fields](#exposed-fields)) |
+
+### Export layer data
+
+```
+GET /api/admin/layers/{id}/export
+```
+
+Downloads the full layer as a GeoJSON file. The response includes a `Content-Disposition` header for file download. If `exposed_fields` is configured, only those columns are included in the export.
+
 ### Delete a layer
 
 ```
@@ -192,3 +222,40 @@ Returns full job details including progress, logs, and timing:
 | `failed`    | Import failed (see `error` field and logs) |
 
 Failed jobs are automatically retried up to 3 times by pg-boss, with a 30-second delay between attempts.
+
+## Exposed Fields
+
+By default, all columns from the data table are exposed in the OGC API (features, queryables, vector tiles, and export). You can restrict which columns are visible by configuring `exposed_fields` on a layer.
+
+### Behavior
+
+| `exposed_fields` value    | Effect                           |
+| ------------------------- | -------------------------------- |
+| `null` (default)          | All columns are exposed          |
+| `[]` (empty array)        | Only geometry and ID are exposed |
+| `[{source, alias?}, ...]` | Only listed columns are exposed  |
+
+### Aliasing
+
+Each exposed field can have an optional `alias`. When set, the alias replaces the original column name in all API responses:
+
+```json
+{
+  "exposed_fields": [
+    { "source": "nom_commune", "alias": "city" },
+    { "source": "pop_totale", "alias": "population" }
+  ]
+}
+```
+
+With this configuration, API consumers see `city` and `population` as property names instead of the raw column names.
+
+### Affected endpoints
+
+Exposed fields filtering applies to:
+
+- **Features** (`/collections/{id}/items`) — only configured columns appear in `properties`
+- **Single feature** (`/collections/{id}/items/{fid}`) — same filtering
+- **Queryables** (`/collections/{id}/queryables`) — only exposed columns are listed as filterable
+- **Vector tiles** (`/collections/{id}/tiles/{z}/{x}/{y}.pbf`) — MVT properties reflect exposed fields
+- **Export** (`/api/admin/layers/{id}/export`) — GeoJSON export respects the configuration

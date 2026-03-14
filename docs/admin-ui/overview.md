@@ -27,13 +27,22 @@ Browse and manage your geographic layers:
 
 ### Layer detail
 
-The layer detail page has three tabs:
+The layer detail page has four tabs:
 
 **Map view** — interactive map powered by MapLibre GL JS with vector tile rendering. Includes zoom, pan, and feature inspection on click.
 
 **Table view** — tabular display of features with column sorting. Features are loaded with pagination.
 
 **Schema view** — lists all columns in the layer's data table with their PostgreSQL types and basic statistics (distinct values, null count).
+
+**Settings view** — configure the layer's metadata and API behavior:
+
+- **Workspace** — move the layer to a different workspace
+- **Description** and **Attribution** — free-text metadata
+- **Datetime column** — select which column to use for OGC `?datetime=` temporal filtering
+- **Exposed fields** — choose which columns are visible in the OGC API, with optional aliases. See [Exposed Fields](/api/admin-endpoints#exposed-fields).
+
+A **Download GeoJSON** button in the layer header exports the full dataset as a GeoJSON file.
 
 ### Import history
 

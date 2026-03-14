@@ -18,6 +18,7 @@ export interface Layer {
   geometry_type: string | null
   id_column: string
   datetime_column: string | null
+  exposed_fields: Array<{ source: string; alias?: string }> | null
   srid: number
   bbox: string | null
   feature_count: number | null
