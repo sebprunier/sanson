@@ -27,7 +27,7 @@ Sanson exposes geographic data stored in PostgreSQL/PostGIS via clean, modern RE
 - **OGC API — Features compliant** — compatible out of the box with QGIS, ArcGIS, FME, and any OGC-compliant client
 - **CQL2 filtering** — filter features by attributes and geometry using the OGC CQL2 Text standard (`=`, `<>`, `<`, `>`, `AND`, `OR`, `NOT`, `LIKE`, `IN`, `IS NULL`, `S_INTERSECTS`, `S_WITHIN`, `S_CONTAINS`)
 - **Bbox, datetime, and proximity filtering** — spatial bounding box, temporal filters (OGC Core), and `lat`+`lon`+`radius` geographic shortcuts
-- **GeoJSON import** — synchronous import with automatic table creation, spatial indexing, and import history tracking
+- **Async GeoJSON import** — background import via pg-boss with progress tracking, batch inserts, and import history. Supports plain and gzip-compressed GeoJSON (`.geojson`, `.json`, `.geojson.gz`, `.gz`)
 - **Queryables** — discover filterable properties for each collection
 - **OGC pagination** — `self`, `next`, `prev`, `first`, `last` links in body and HTTP `Link` header + `X-Total-Count`
 - **Web admin UI** — dashboard, workspace and layer management, data import, interactive map and table views with CQL2 filter
@@ -39,7 +39,6 @@ Sanson exposes geographic data stored in PostgreSQL/PostGIS via clean, modern RE
 ### Planned
 
 - **Shapefile import** — via `ogr2ogr` with SRID detection and reprojection
-- **Async ingestion** — background workers with pg-boss for large datasets
 
 ## What Sanson is not
 
@@ -54,6 +53,7 @@ Sanson exposes geographic data stored in PostgreSQL/PostGIS via clean, modern RE
 | Component | Technology                                   |
 | --------- | -------------------------------------------- |
 | API       | Node.js 24 + TypeScript + Fastify 5          |
+| Workers   | pg-boss (PostgreSQL-based job queue)         |
 | Database  | PostgreSQL 16 + PostGIS 3.4                  |
 | Admin UI  | React 19 + Vite + Tailwind CSS + MapLibre GL |
 
@@ -106,7 +106,9 @@ GET /collections/{id}/queryables             Queryable properties (JSON Schema)
 GET /collections/{id}/tiles/{z}/{x}/{y}.pbf  Mapbox Vector Tile (MVT)
 GET /api                                     OpenAPI 3.0 specification
 GET /health                                  Database connectivity check
-POST /api/admin/import                       Import a GeoJSON file
+POST /api/admin/import                       Import a GeoJSON file (async, returns 202)
+GET  /api/admin/jobs                         List import jobs (status, progress, history)
+GET  /api/admin/jobs/:id                     Get a specific job status
 ```
 
 ---
@@ -118,7 +120,8 @@ POST /api/admin/import                       Import a GeoJSON file
 ```
 sanson/
 ├── packages/
-│   └── api/        Fastify server — OGC API + admin routes
+│   ├── api/        Fastify server — OGC API + admin routes
+│   └── worker/     pg-boss job queue + async ingestion workers
 ├── apps/
 │   └── admin/      React admin UI (Tailwind CSS + MapLibre GL)
 ├── docker/

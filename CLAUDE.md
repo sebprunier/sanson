@@ -20,20 +20,20 @@ Full specifications are in [`SPECS.md`](./SPECS.md). Read it before making signi
 
 ### Not yet implemented (planned)
 
-- **Job queue**: pg-boss (PostgreSQL-based, no Redis or external queue)
 - **Geo ingestion**: `ogr2ogr` CLI + PostgreSQL `COPY` for Shapefile support and large volumes
 
 ## Monorepo layout
 
 ```
 packages/api/     Fastify server — OGC API + admin routes
+packages/worker/  pg-boss job queue + async ingestion workers
 apps/admin/       React + Tailwind CSS + MapLibre GL admin UI
 docker/           Docker Compose for local PostgreSQL + PostGIS
 scripts/          SQL init scripts
 data/             Test datasets (GeoJSON, Shapefile)
 ```
 
-Planned but not yet created: `packages/core/` (shared types, CQL2 parser), `packages/worker/` (ingestion workers).
+Planned but not yet created: `packages/core/` (shared types, CQL2 parser).
 
 ## Running things
 
@@ -54,7 +54,7 @@ pnpm --filter @sanson/admin e2e:headed      # same, with visible browser
 - **English** everywhere — code, comments, commit messages, docs
 - **Raw SQL** — use `pg` Pool directly, no ORM, no query builder
 - **Fastify patterns** — define routes in separate files under `src/routes/`, register them in `app.ts`
-- **`buildApp(db: Pool)`** — app factory takes a Pool as argument, enabling clean testing without mocks
+- **`buildApp(db: Pool, options?)`** — app factory takes a Pool + optional config (including `boss` for pg-boss), enabling clean testing without mocks
 - **No `any`** — TypeScript strict mode is enforced
 - Imports use `.js` extension only when `moduleResolution: NodeNext` requires it — current config is `Bundler`, so no extension needed
 
@@ -78,7 +78,10 @@ pnpm --filter @sanson/admin e2e:headed      # same, with visible browser
 
 - **OGC API Features URLs** — collections are identified as `{workspaceName}:{layerName}` (e.g., `default:centrales`)
 - **Default workspace** — always exists, created in `scripts/init.sql`
-- **Synchronous GeoJSON import** — direct parsing + insert via `ST_GeomFromGeoJSON`. Each import is recorded in `sanson_import_history`. Async worker with pg-boss planned for later.
+- **Async GeoJSON import** — API saves file to `UPLOAD_DIR`, creates `sanson_import_history` row, queues a pg-boss job, returns `202 Accepted`. Worker processes the file: parses GeoJSON (with gzip decompression if needed), creates table with `ST_GeomFromGeoJSON`, inserts in batches of 500, updates progress in DB. Supports `.geojson`, `.json`, `.geojson.gz`, `.gz`.
+- **pg-boss job queue** — PostgreSQL-based async workers via pg-boss v10. `NODE_MODE` env var controls startup: `api` (HTTP only), `worker` (pg-boss only), `all` (both, default). Requires explicit `createQueue()` before `send()`/`work()`. Worker handler receives an array: `async ([job]) =>`.
+- **Geometry type promotion** — always promotes to Multi variant (`MultiPolygon`, `MultiLineString`, etc.) via `toMultiType()` and wraps inserts with `ST_Multi()` to handle mixed single/multi geometries in the same GeoJSON file.
+- **Layer deletion** — `sanson_import_history.layer_id` FK uses `ON DELETE CASCADE`. DELETE handler also drops the associated `data_*` PostGIS table.
 - **CQL2 Text parser** — recursive descent parser in `packages/api/src/cql2.ts`, outputs parameterized SQL. Validates column names against `information_schema.columns`.
 - **OGC datetime filter** — `?datetime=` supports instant, interval, and open-ended bounds (`..`). Requires `datetime_column` to be configured on the layer.
 - **Lat/lon/radius shortcuts** — non-standard convenience params: `?lat=&lon=` for point intersection, `?lat=&lon=&radius=` for radius search (meters, via `::geography` cast). Combinable with all other filters.
@@ -90,32 +93,24 @@ pnpm --filter @sanson/admin e2e:headed      # same, with visible browser
 
 ## Roadmap / next steps
 
-### 1. pg-boss + async workers
-
-- Add `packages/worker/` with pg-boss job queue (PostgreSQL-based)
-- Async ingestion with progress tracking, retry logic, and logs
-- `NODE_MODE` env var to run API-only, worker-only, or both
-- Admin API routes for job status and logs
-
-### 2. Shapefile support
+### 1. Shapefile support
 
 - Import via `ogr2ogr` (GDAL CLI) with SRID detection and reprojection
-- Depends on pg-boss for async processing (large files)
+- Uses pg-boss for async processing (large files)
 - PostgreSQL `COPY` for bulk insert performance
 
-### 3. UI improvements
+### 2. UI improvements
 
 - Layer editing: description, attribution, exposed fields, datetime_column, style JSON
-- Real-time import progress (polling pg-boss job status)
 - `datetime_column` configuration in layer settings
 
-### 4. Quick wins
+### 3. Quick wins
 
 - GeoJSON export / download endpoint
 - Docker build for production deployment
 - `packages/core/` extraction (shared types, CQL2 parser)
 
-### 5. Conformance V2
+### 4. Conformance V2
 
 - CQL2 JSON encoding (currently only CQL2 Text)
 - CQL2 Temporal operators
