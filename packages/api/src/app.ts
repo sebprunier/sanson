@@ -36,7 +36,7 @@ export function buildApp(db: Pool, options: AppOptions = {}): FastifyInstance {
     },
   })
 
-  app.register(multipart, { limits: { fileSize: 100 * 1024 * 1024 } }) // 100MB max
+  app.register(multipart, { limits: { fileSize: 1024 * 1024 * 1024 } }) // 1GB max
 
   app.addHook('onClose', async () => {
     await db.end()

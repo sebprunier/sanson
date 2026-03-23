@@ -1,7 +1,8 @@
 import { FastifyInstance } from 'fastify'
 import { Pool } from 'pg'
-import { writeFileSync, mkdirSync } from 'fs'
+import { writeFileSync, mkdirSync, createWriteStream } from 'fs'
 import { join } from 'path'
+import { pipeline } from 'stream/promises'
 import { gunzipSync } from 'zlib'
 import PgBoss from 'pg-boss'
 import { QUEUE_INGEST, IngestJobPayload } from '@sanson/worker'
@@ -42,8 +43,14 @@ export async function adminImportRoutes(
       let separator: string | undefined
       let longitudeColumn: string | undefined
       let latitudeColumn: string | undefined
-      let fileBuffer: Buffer | undefined
       let sourceFileName: string | undefined
+
+      // For shapefiles we stream directly to disk (can be hundreds of MB).
+      // For GeoJSON/CSV we buffer in memory (need to parse/validate/count).
+      let fileBuffer: Buffer | undefined
+      let streamedFilePath: string | undefined
+
+      mkdirSync(UPLOAD_DIR, { recursive: true })
 
       for await (const part of parts) {
         if (part.type === 'field') {
@@ -55,11 +62,24 @@ export async function adminImportRoutes(
           if (part.fieldname === 'latitude') latitudeColumn = part.value as string
         } else if (part.type === 'file' && part.fieldname === 'file') {
           sourceFileName = part.filename
-          fileBuffer = await part.toBuffer()
+          const isZip = sourceFileName?.toLowerCase().endsWith('.zip')
+          if (isZip) {
+            // Stream shapefile to disk — no memory buffering
+            const tmpPath = join(UPLOAD_DIR, `tmp_${Date.now()}.zip`)
+            await pipeline(part.file, createWriteStream(tmpPath))
+            if (part.file.truncated) {
+              reply.status(413)
+              return { statusCode: 413, error: 'Payload Too Large', message: 'File too large' }
+            }
+            streamedFilePath = tmpPath
+          } else {
+            fileBuffer = await part.toBuffer()
+          }
         }
       }
 
-      if (!workspaceId || !layerName || !fileBuffer) {
+      const hasFile = fileBuffer || streamedFilePath
+      if (!workspaceId || !layerName || !hasFile) {
         reply.status(400)
         return {
           statusCode: 400,
@@ -68,11 +88,12 @@ export async function adminImportRoutes(
         }
       }
 
-      // Detect format from file extension
+      // Detect format from file extension or content
       const isCsv = CSV_EXTENSIONS.some((ext) => sourceFileName?.toLowerCase().endsWith(ext))
       const isShapefile =
+        !!streamedFilePath ||
         SHAPEFILE_EXTENSIONS.some((ext) => sourceFileName?.toLowerCase().endsWith(ext)) ||
-        (fileBuffer[0] === 0x50 && fileBuffer[1] === 0x4b) // ZIP magic bytes (PK)
+        (fileBuffer && fileBuffer[0] === 0x50 && fileBuffer[1] === 0x4b) // ZIP magic bytes (PK)
 
       // Verify workspace exists
       const { rows: wsRows } = await options.db.query(
@@ -97,14 +118,10 @@ export async function adminImportRoutes(
 
       if (isShapefile) {
         // Shapefile: total_features unknown until worker inspects with ogrinfo
-        if (fileBuffer.length === 0) {
-          reply.status(400)
-          return { statusCode: 400, error: 'Bad Request', message: 'ZIP file is empty' }
-        }
         totalFeatures = 0
       } else if (isCsv) {
         // CSV validation: count data rows
-        const text = fileBuffer.toString('utf-8')
+        const text = fileBuffer!.toString('utf-8')
         const lines = text.split(/\r?\n/).filter((l) => l.trim() !== '')
         if (lines.length < 2) {
           reply.status(400)
@@ -119,10 +136,11 @@ export async function adminImportRoutes(
         // GeoJSON validation
         // Decompress gzip if needed
         const isGzip =
-          sourceFileName?.endsWith('.gz') || (fileBuffer[0] === 0x1f && fileBuffer[1] === 0x8b)
+          sourceFileName?.endsWith('.gz') ||
+          (fileBuffer && fileBuffer[0] === 0x1f && fileBuffer[1] === 0x8b)
         if (isGzip) {
           try {
-            fileBuffer = gunzipSync(fileBuffer)
+            fileBuffer = gunzipSync(fileBuffer!)
           } catch {
             reply.status(400)
             return {
@@ -135,7 +153,7 @@ export async function adminImportRoutes(
 
         let geojson: GeoJsonFeatureCollection
         try {
-          geojson = JSON.parse(fileBuffer.toString('utf-8'))
+          geojson = JSON.parse(fileBuffer!.toString('utf-8'))
         } catch {
           reply.status(400)
           return { statusCode: 400, error: 'Bad Request', message: 'Invalid JSON file' }
@@ -171,11 +189,15 @@ export async function adminImportRoutes(
       )
       const importHistoryId = historyRows[0].id
 
-      // Save file to disk
-      mkdirSync(UPLOAD_DIR, { recursive: true })
+      // Save file to disk (or rename streamed file)
       const fileExt = isShapefile ? '.zip' : isCsv ? '.csv' : '.geojson'
       const filePath = join(UPLOAD_DIR, `${importHistoryId}${fileExt}`)
-      writeFileSync(filePath, fileBuffer)
+      if (streamedFilePath) {
+        const { renameSync } = await import('fs')
+        renameSync(streamedFilePath, filePath)
+      } else {
+        writeFileSync(filePath, fileBuffer!)
+      }
 
       // Queue the job
       const format = isShapefile ? 'shapefile' : isCsv ? 'csv' : 'geojson'
