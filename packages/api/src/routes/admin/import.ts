@@ -18,6 +18,7 @@ interface GeoJsonFeatureCollection {
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR ?? './uploads'
 const CSV_EXTENSIONS = ['.csv']
+const SHAPEFILE_EXTENSIONS = ['.zip']
 
 export async function adminImportRoutes(
   app: FastifyInstance,
@@ -69,6 +70,9 @@ export async function adminImportRoutes(
 
       // Detect format from file extension
       const isCsv = CSV_EXTENSIONS.some((ext) => sourceFileName?.toLowerCase().endsWith(ext))
+      const isShapefile =
+        SHAPEFILE_EXTENSIONS.some((ext) => sourceFileName?.toLowerCase().endsWith(ext)) ||
+        (fileBuffer[0] === 0x50 && fileBuffer[1] === 0x4b) // ZIP magic bytes (PK)
 
       // Verify workspace exists
       const { rows: wsRows } = await options.db.query(
@@ -91,7 +95,14 @@ export async function adminImportRoutes(
 
       let totalFeatures: number
 
-      if (isCsv) {
+      if (isShapefile) {
+        // Shapefile: total_features unknown until worker inspects with ogrinfo
+        if (fileBuffer.length === 0) {
+          reply.status(400)
+          return { statusCode: 400, error: 'Bad Request', message: 'ZIP file is empty' }
+        }
+        totalFeatures = 0
+      } else if (isCsv) {
         // CSV validation: count data rows
         const text = fileBuffer.toString('utf-8')
         const lines = text.split(/\r?\n/).filter((l) => l.trim() !== '')
@@ -162,11 +173,12 @@ export async function adminImportRoutes(
 
       // Save file to disk
       mkdirSync(UPLOAD_DIR, { recursive: true })
-      const fileExt = isCsv ? '.csv' : '.geojson'
+      const fileExt = isShapefile ? '.zip' : isCsv ? '.csv' : '.geojson'
       const filePath = join(UPLOAD_DIR, `${importHistoryId}${fileExt}`)
       writeFileSync(filePath, fileBuffer)
 
       // Queue the job
+      const format = isShapefile ? 'shapefile' : isCsv ? 'csv' : 'geojson'
       const payload: IngestJobPayload = {
         importHistoryId,
         filePath,
@@ -174,7 +186,7 @@ export async function adminImportRoutes(
         layerName,
         srid,
         sourceFileName: sourceFileName ?? layerName,
-        format: isCsv ? 'csv' : 'geojson',
+        format,
         ...(isCsv && (separator || longitudeColumn || latitudeColumn)
           ? {
               csvOptions: {

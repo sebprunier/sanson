@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { PostgreSqlContainer, StartedPostgreSqlContainer } from '@testcontainers/postgresql'
 import { Pool } from 'pg'
 import { readFileSync } from 'fs'
+import { execSync } from 'child_process'
 import { join } from 'path'
 import FormData from 'form-data'
 import PgBoss from 'pg-boss'
@@ -14,6 +15,18 @@ const geojsonPath = join(
   '../../../../data/centrales-de-production-nucleaire-edf.geojson',
 )
 const geojsonBuffer = readFileSync(geojsonPath)
+
+const shapefilePath = join(__dirname, '../../../../data/AleaRG_2025_86_L93.zip')
+const shapefileBuffer = readFileSync(shapefilePath)
+
+const hasOgr2ogr = (() => {
+  try {
+    execSync('ogr2ogr --version', { stdio: 'pipe' })
+    return true
+  } catch {
+    return false
+  }
+})()
 
 const csvSemicolon = Buffer.from(
   `CODE;LIBELLE;X_WGS84;Y_WGS84;REGION
@@ -462,6 +475,177 @@ describe('POST /api/admin/import (async)', () => {
     }
 
     expect(status).toBe('failed')
+    await db.end()
+  })
+
+  // --- Shapefile import tests (require ogr2ogr on PATH) ---
+
+  it.skipIf(!hasOgr2ogr)('Shapefile import: queues and returns 202', async () => {
+    // Set DATABASE_URL for the shapefile handler (ogr2ogr needs it)
+    process.env.DATABASE_URL = container.getConnectionUri()
+
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+    const app = buildApp(db, { boss })
+
+    const form = new FormData()
+    form.append('workspace_id', workspaceId)
+    form.append('layer_name', 'alea_rg')
+    form.append('srid', '4326')
+    form.append('file', shapefileBuffer, {
+      filename: 'AleaRG_2025_86_L93.zip',
+      contentType: 'application/zip',
+    })
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/admin/import',
+      payload: form,
+      headers: form.getHeaders(),
+    })
+    await app.close()
+
+    expect(response.statusCode).toBe(202)
+    const body = response.json()
+    expect(body.import_id).toBeDefined()
+    expect(body.status).toBe('pending')
+  })
+
+  it.skipIf(!hasOgr2ogr)(
+    'Shapefile import: worker processes and features are accessible',
+    async () => {
+      const db = new Pool({ connectionString: container.getConnectionUri() })
+      const maxWait = 30_000
+      const start = Date.now()
+      let status = 'pending'
+
+      while (status !== 'completed' && status !== 'failed' && Date.now() - start < maxWait) {
+        const { rows } = await db.query(
+          `SELECT status FROM sanson_import_history WHERE source_file = 'AleaRG_2025_86_L93.zip' ORDER BY created_at DESC LIMIT 1`,
+        )
+        if (rows.length > 0) status = rows[0].status
+        if (status !== 'completed' && status !== 'failed') {
+          await new Promise((r) => setTimeout(r, 500))
+        }
+      }
+
+      expect(status).toBe('completed')
+
+      // Verify features are accessible via OGC API
+      const app = buildApp(db)
+      const itemsResponse = await app.inject({
+        method: 'GET',
+        url: '/collections/default:alea_rg/items?limit=5',
+      })
+      expect(itemsResponse.statusCode).toBe(200)
+      const items = itemsResponse.json()
+      expect(items.numberMatched).toBe(854)
+      expect(items.features).toHaveLength(5)
+      await app.close()
+    },
+  )
+
+  it.skipIf(!hasOgr2ogr)('Shapefile import: history records correct metadata', async () => {
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+
+    const { rows } = await db.query(
+      `SELECT source_file, feature_count, total_features, imported_features,
+              progress, status, duration_ms, started_at, completed_at, logs
+       FROM sanson_import_history
+       WHERE source_file = 'AleaRG_2025_86_L93.zip'
+       ORDER BY created_at DESC LIMIT 1`,
+    )
+    await db.end()
+
+    expect(rows).toHaveLength(1)
+    expect(Number(rows[0].feature_count)).toBe(854)
+    expect(Number(rows[0].total_features)).toBe(854)
+    expect(rows[0].progress).toBe(100)
+    expect(rows[0].status).toBe('completed')
+    expect(rows[0].duration_ms).toBeGreaterThan(0)
+    expect(rows[0].started_at).toBeTruthy()
+    expect(rows[0].completed_at).toBeTruthy()
+    expect(rows[0].logs.some((l: { message: string }) => l.message.includes('Shapefile'))).toBe(
+      true,
+    )
+  })
+
+  it.skipIf(!hasOgr2ogr)(
+    'Shapefile import: SRID reprojection and geometry type promotion',
+    async () => {
+      const db = new Pool({ connectionString: container.getConnectionUri() })
+
+      // Verify layer metadata
+      const { rows: layerRows } = await db.query(
+        `SELECT srid, geometry_type, feature_count FROM sanson_layers WHERE name = 'alea_rg'`,
+      )
+      expect(layerRows).toHaveLength(1)
+      expect(layerRows[0].srid).toBe(4326) // reprojected from 2154
+      expect(layerRows[0].geometry_type).toBe('MultiPolygon') // promoted from Polygon
+
+      // Verify data is actually in EPSG:4326 (coordinates should be in lon/lat range)
+      const { rows: geomRows } = await db.query(
+        `SELECT ST_X(ST_Centroid(geom)) AS lon, ST_Y(ST_Centroid(geom)) AS lat
+       FROM data_alea_rg LIMIT 1`,
+      )
+      const lon = parseFloat(geomRows[0].lon)
+      const lat = parseFloat(geomRows[0].lat)
+      // Vienne (86) department in France: roughly lon 0-1, lat 46-47
+      expect(lon).toBeGreaterThan(-1)
+      expect(lon).toBeLessThan(2)
+      expect(lat).toBeGreaterThan(45)
+      expect(lat).toBeLessThan(48)
+
+      await db.end()
+    },
+  )
+
+  it.skipIf(!hasOgr2ogr)('Shapefile import: re-import drops and recreates', async () => {
+    const appDb = new Pool({ connectionString: container.getConnectionUri() })
+    const app = buildApp(appDb, { boss })
+
+    // Re-import same shapefile with same layer name
+    const form = new FormData()
+    form.append('workspace_id', workspaceId)
+    form.append('layer_name', 'alea_rg')
+    form.append('srid', '4326')
+    form.append('file', shapefileBuffer, {
+      filename: 'AleaRG_2025_86_L93.zip',
+      contentType: 'application/zip',
+    })
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/admin/import',
+      payload: form,
+      headers: form.getHeaders(),
+    })
+    await app.close()
+
+    expect(response.statusCode).toBe(202)
+
+    // Wait for completion (use separate pool — app.close() ends appDb)
+    const db = new Pool({ connectionString: container.getConnectionUri() })
+    const maxWait = 30_000
+    const start = Date.now()
+    let status = 'pending'
+    const importId = response.json().import_id
+
+    while (status !== 'completed' && status !== 'failed' && Date.now() - start < maxWait) {
+      const { rows } = await db.query(`SELECT status FROM sanson_import_history WHERE id = $1`, [
+        importId,
+      ])
+      if (rows.length > 0) status = rows[0].status
+      if (status !== 'completed' && status !== 'failed') {
+        await new Promise((r) => setTimeout(r, 500))
+      }
+    }
+
+    expect(status).toBe('completed')
+
+    // Verify still 854 features (not doubled)
+    const { rows: countRows } = await db.query('SELECT COUNT(*) AS cnt FROM data_alea_rg')
+    expect(Number(countRows[0].cnt)).toBe(854)
+
     await db.end()
   })
 })

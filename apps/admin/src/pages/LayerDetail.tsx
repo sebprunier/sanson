@@ -281,9 +281,9 @@ function applyMapStyle(
 }
 
 function Legend({ style, geometryType }: { style: StyleConfig; geometryType: string | null }) {
-  const geom = geometryType ?? ''
-  const isLine = geom.includes('Line')
-  const isPoint = !geom.includes('Polygon') && !isLine
+  const geom = (geometryType ?? '').toLowerCase()
+  const isLine = geom.includes('line')
+  const isPoint = !geom.includes('polygon') && !isLine
 
   const renderSymbol = (color: string) => {
     if (isPoint) {

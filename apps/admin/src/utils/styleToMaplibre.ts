@@ -17,7 +17,7 @@ export function styleToMaplibrePaint(
 ): MaplibrePaint {
   if (!style) return defaultPaint(geometryType)
 
-  const geom = geometryType ?? ''
+  const geom = (geometryType ?? '').toLowerCase()
 
   if (style.type === 'single') {
     return singlePaint(style, geom)
@@ -33,14 +33,14 @@ export function styleToMaplibrePaint(
 }
 
 function defaultPaint(geometryType: string | null): MaplibrePaint {
-  const geom = geometryType ?? ''
-  if (geom.includes('Polygon')) {
+  const geom = (geometryType ?? '').toLowerCase()
+  if (geom.includes('polygon')) {
     return {
       fill: { 'fill-color': DEFAULT_FILL_COLOR, 'fill-opacity': DEFAULT_FILL_OPACITY },
       line: { 'line-color': DEFAULT_FILL_COLOR, 'line-width': DEFAULT_STROKE_WIDTH },
     }
   }
-  if (geom.includes('Line')) {
+  if (geom.includes('line')) {
     return { line: { 'line-color': DEFAULT_FILL_COLOR, 'line-width': 2 } }
   }
   return {
@@ -60,13 +60,13 @@ function singlePaint(style: StyleConfig, geom: string): MaplibrePaint {
   const strokeWidth = style.stroke_width ?? DEFAULT_STROKE_WIDTH
   const radius = style.circle_radius ?? DEFAULT_CIRCLE_RADIUS
 
-  if (geom.includes('Polygon')) {
+  if (geom.includes('polygon')) {
     return {
       fill: { 'fill-color': color, 'fill-opacity': opacity },
       line: { 'line-color': strokeColor, 'line-width': strokeWidth },
     }
   }
-  if (geom.includes('Line')) {
+  if (geom.includes('line')) {
     return { line: { 'line-color': color, 'line-width': strokeWidth } }
   }
   return {
@@ -89,19 +89,20 @@ function categorizedPaint(style: StyleConfig, geom: string): MaplibrePaint {
   const radius = style.circle_radius ?? DEFAULT_CIRCLE_RADIUS
 
   // Build match expression: ['match', ['get', field], val1, color1, val2, color2, ..., default]
+  // MVT tiles cast all properties to text, so values must be strings for matching
   const matchExpr: unknown[] = ['match', ['get', field]]
   for (const cat of categories) {
-    matchExpr.push(cat.value, cat.color)
+    matchExpr.push(String(cat.value), cat.color)
   }
   matchExpr.push(defaultColor)
 
-  if (geom.includes('Polygon')) {
+  if (geom.includes('polygon')) {
     return {
       fill: { 'fill-color': matchExpr, 'fill-opacity': opacity },
       line: { 'line-color': strokeColor, 'line-width': strokeWidth },
     }
   }
-  if (geom.includes('Line')) {
+  if (geom.includes('line')) {
     return { line: { 'line-color': matchExpr, 'line-width': strokeWidth } }
   }
   return {
@@ -129,13 +130,13 @@ function graduatedPaint(style: StyleConfig, geom: string): MaplibrePaint {
     stepExpr.push(cls.min, cls.color)
   }
 
-  if (geom.includes('Polygon')) {
+  if (geom.includes('polygon')) {
     return {
       fill: { 'fill-color': stepExpr, 'fill-opacity': opacity },
       line: { 'line-color': strokeColor, 'line-width': strokeWidth },
     }
   }
-  if (geom.includes('Line')) {
+  if (geom.includes('line')) {
     return { line: { 'line-color': stepExpr, 'line-width': strokeWidth } }
   }
   return {

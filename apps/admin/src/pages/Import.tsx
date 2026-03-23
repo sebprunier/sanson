@@ -12,6 +12,7 @@ export function Import() {
   const [srid, setSrid] = useState('4326')
   const [file, setFile] = useState<File | null>(null)
   const [isCsv, setIsCsv] = useState(false)
+  const [isShapefile, setIsShapefile] = useState(false)
   const [separator, setSeparator] = useState('')
   const [longitudeCol, setLongitudeCol] = useState('')
   const [latitudeCol, setLatitudeCol] = useState('')
@@ -96,7 +97,9 @@ export function Import() {
     if (!f) return
     setFile(f)
     const csv = f.name.toLowerCase().endsWith('.csv')
+    const shp = f.name.toLowerCase().endsWith('.zip')
     setIsCsv(csv)
+    setIsShapefile(shp)
     if (!layerName) {
       setLayerName(
         f.name
@@ -140,6 +143,7 @@ export function Import() {
     setCurrentJob(null)
     setFile(null)
     setIsCsv(false)
+    setIsShapefile(false)
     setSeparator('')
     setLongitudeCol('')
     setLatitudeCol('')
@@ -270,12 +274,14 @@ export function Import() {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".geojson,.json,.geojson.gz,.gz,.csv"
+              accept=".geojson,.json,.geojson.gz,.gz,.csv,.zip"
               onChange={handleFileChange}
               required
               className="w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
             />
-            <p className="text-xs text-gray-400 mt-1">GeoJSON, GeoJSON.gz, or CSV</p>
+            <p className="text-xs text-gray-400 mt-1">
+              GeoJSON, GeoJSON.gz, CSV, or Shapefile (.zip)
+            </p>
           </div>
 
           <div>
@@ -315,10 +321,14 @@ export function Import() {
               placeholder="4326"
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
-            <p className="text-xs text-gray-400 mt-1">Default: 4326 (WGS84)</p>
+            <p className="text-xs text-gray-400 mt-1">
+              {isShapefile
+                ? 'Target storage SRID. Source SRID is auto-detected from .prj file.'
+                : 'Default: 4326 (WGS84)'}
+            </p>
           </div>
 
-          {isCsv && (
+          {isCsv && !isShapefile && (
             <>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Separator</label>

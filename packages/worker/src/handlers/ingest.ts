@@ -3,6 +3,7 @@ import { Pool } from 'pg'
 import { IngestJobPayload } from '../boss'
 import { updateProgress } from '../utils/progress'
 import { handleCsvIngest } from './ingest-csv'
+import { handleShapefileIngest } from './ingest-shapefile'
 
 const BATCH_SIZE = 500
 
@@ -39,7 +40,10 @@ function toMultiType(geomType: string): string {
 }
 
 export async function handleIngest(db: Pool, payload: IngestJobPayload): Promise<void> {
-  // Dispatch to CSV handler if format is csv
+  // Dispatch to format-specific handlers
+  if (payload.format === 'shapefile') {
+    return handleShapefileIngest(db, payload)
+  }
   if (payload.format === 'csv') {
     return handleCsvIngest(db, payload)
   }

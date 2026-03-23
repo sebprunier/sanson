@@ -20,7 +20,7 @@ export interface IngestJobPayload {
   layerName: string
   srid: number
   sourceFileName: string
-  format?: 'geojson' | 'csv'
+  format?: 'geojson' | 'csv' | 'shapefile'
   csvOptions?: {
     separator: string
     longitudeColumn: string

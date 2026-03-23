@@ -18,9 +18,9 @@ Full specifications are in [`SPECS.md`](./SPECS.md). Read it before making signi
 - **Linting**: ESLint + Prettier, enforced on commit via Husky + lint-staged
 - **CI**: GitHub Actions (lint, typecheck, tests)
 
-### Not yet implemented (planned)
+### External dependencies
 
-- **Geo ingestion**: `ogr2ogr` CLI + PostgreSQL `COPY` for Shapefile support and large volumes
+- **GDAL/ogr2ogr**: Required for Shapefile import. Must be installed on the system (`gdal-bin` on Debian/Ubuntu, `gdal` on macOS via Homebrew). Shapefile tests are skipped if ogr2ogr is not available.
 
 ## Monorepo layout
 
@@ -80,6 +80,7 @@ pnpm --filter @sanson/admin e2e:headed      # same, with visible browser
 - **Default workspace** — always exists, created in `scripts/init.sql`
 - **Async GeoJSON import** — API saves file to `UPLOAD_DIR`, creates `sanson_import_history` row, queues a pg-boss job, returns `202 Accepted`. Worker processes the file: parses GeoJSON (with gzip decompression if needed), creates table with `ST_GeomFromGeoJSON`, inserts in batches of 500, updates progress in DB. Supports `.geojson`, `.json`, `.geojson.gz`, `.gz`.
 - **CSV import** — Same async pipeline as GeoJSON. Auto-detects separator (`;`, `,`, `\t`) from header line and geo columns from common names (`longitude`/`lon`/`lng`/`x`/`x_wgs84`/etc.) with priority-based matching (explicit WGS84 names first, generic last; projected names like `x_l93` are NOT auto-detected). Optional explicit params: `separator`, `longitude`, `latitude`. Creates `MultiPoint` geometry via `ST_MakePoint`. Strips UTF-8 BOM, infers column types from first 100 rows, skips rows with invalid coordinates. Reserved column names (`id`, `geom`) are prefixed with `_`.
+- **Shapefile import** — Same async pipeline. Accepts `.zip` files containing a Shapefile (.shp + .dbf + .prj). Uses `ogr2ogr` (GDAL CLI) for direct-to-PostGIS import: reads ZIP via `/vsizip/`, auto-detects source SRID from `.prj`, reprojects to target SRID, bulk inserts via `COPY`. Handler in `packages/worker/src/handlers/ingest-shapefile.ts`. Phase 1: `ogrinfo -json -so` to inspect metadata (feature count, geometry type, SRID). Phase 2: `ogr2ogr -f PostgreSQL` with `-nlt PROMOTE_TO_MULTI`, `-lco FID=id`, `-lco GEOMETRY_NAME=geom`, `-progress`. PG connection string built as key=value format (not URI) to avoid GDAL space-encoding issues. Requires `DATABASE_URL` env var and `ogr2ogr` on PATH. If ZIP contains multiple layers, only the first is imported.
 - **Re-import safety** — when importing into an existing layer (same workspace + name), the data table is dropped and recreated. This ensures no stale data accumulates from previous imports.
 - **pg-boss job queue** — PostgreSQL-based async workers via pg-boss v10. `NODE_MODE` env var controls startup: `api` (HTTP only), `worker` (pg-boss only), `all` (both, default). Requires explicit `createQueue()` before `send()`/`work()`. Worker handler receives an array: `async ([job]) =>`.
 - **Geometry type promotion** — always promotes to Multi variant (`MultiPolygon`, `MultiLineString`, etc.) via `toMultiType()` and wraps inserts with `ST_Multi()` to handle mixed single/multi geometries in the same GeoJSON file.
@@ -100,18 +101,12 @@ pnpm --filter @sanson/admin e2e:headed      # same, with visible browser
 
 ## Roadmap / next steps
 
-### 1. Shapefile support
-
-- Import via `ogr2ogr` (GDAL CLI) with SRID detection and reprojection
-- Uses pg-boss for async processing (large files)
-- PostgreSQL `COPY` for bulk insert performance
-
-### 2. Quick wins
+### 1. Quick wins
 
 - Docker build for production deployment
 - `packages/core/` extraction (shared types, CQL2 parser)
 
-### 3. OGC CITE validation
+### 2. OGC CITE validation
 
 - Run OGC official test suite (TEAM Engine) against Sanson to validate conformance
 - Docker: `ogccite/teamengine-production` — test suites for Features 1.0 and Tiles 1.0
