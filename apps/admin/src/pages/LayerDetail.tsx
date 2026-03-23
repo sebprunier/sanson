@@ -142,6 +142,50 @@ function TabButton({
   )
 }
 
+const BASEMAPS = {
+  osm: {
+    label: 'OSM',
+    tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+    attribution: '&copy; OpenStreetMap contributors',
+  },
+  light: {
+    label: 'Light',
+    tiles: ['https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'],
+    attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+  },
+  satellite: {
+    label: 'Satellite',
+    tiles: [
+      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    ],
+    attribution: 'Tiles &copy; Esri',
+  },
+} as const
+
+type BasemapId = keyof typeof BASEMAPS
+
+function parseBbox(bbox: string | number[] | null): number[] | null {
+  if (!bbox) return null
+  try {
+    const coords = typeof bbox === 'string' ? (JSON.parse(bbox) as number[]) : bbox
+    return coords.length === 4 ? coords : null
+  } catch {
+    return null
+  }
+}
+
+function fitToBbox(map: maplibregl.Map, bbox: string | number[] | null) {
+  const coords = parseBbox(bbox)
+  if (!coords) return
+  map.fitBounds(
+    [
+      [coords[0], coords[1]],
+      [coords[2], coords[3]],
+    ],
+    { padding: 50 },
+  )
+}
+
 function MapView({
   collectionId,
   bbox,
@@ -149,12 +193,13 @@ function MapView({
   style,
 }: {
   collectionId: string
-  bbox: string | null
+  bbox: string | number[] | null
   geometryType: string | null
   style?: StyleConfig | null
 }) {
   const mapContainer = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
+  const [basemap, setBasemap] = useState<BasemapId>('osm')
 
   const layerName = collectionId.includes(':') ? collectionId.split(':')[1] : collectionId
 
@@ -166,14 +211,14 @@ function MapView({
       style: {
         version: 8,
         sources: {
-          osm: {
+          basemap: {
             type: 'raster',
-            tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+            tiles: BASEMAPS.osm.tiles as unknown as string[],
             tileSize: 256,
-            attribution: '&copy; OpenStreetMap contributors',
+            attribution: BASEMAPS.osm.attribution,
           },
         },
-        layers: [{ id: 'osm', type: 'raster', source: 'osm' }],
+        layers: [{ id: 'basemap', type: 'raster', source: 'basemap' }],
       },
       center: [2.3, 46.8],
       zoom: 5,
@@ -190,23 +235,7 @@ function MapView({
       })
 
       applyMapStyle(map, layerName, geometryType, style ?? null)
-
-      if (bbox) {
-        try {
-          const coords = JSON.parse(bbox) as number[]
-          if (coords.length === 4) {
-            map.fitBounds(
-              [
-                [coords[0], coords[1]],
-                [coords[2], coords[3]],
-              ],
-              { padding: 50 },
-            )
-          }
-        } catch {
-          /* ignore */
-        }
-      }
+      fitToBbox(map, bbox)
 
       map.on('click', (e) => {
         const layerIds = ['features-circle', 'features-fill', 'features-line'].filter((lid) =>
@@ -230,9 +259,60 @@ function MapView({
     }
   }, [collectionId, bbox, geometryType, layerName, style])
 
+  // Switch basemap tiles when selection changes
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !map.isStyleLoaded()) return
+    const bm = BASEMAPS[basemap]
+    map.removeLayer('basemap')
+    map.removeSource('basemap')
+    map.addSource('basemap', {
+      type: 'raster',
+      tiles: bm.tiles as unknown as string[],
+      tileSize: 256,
+      attribution: bm.attribution,
+    })
+    // Insert basemap below all feature layers
+    const firstFeatureLayer = ['features-fill', 'features-line', 'features-circle'].find((lid) =>
+      map.getLayer(lid),
+    )
+    map.addLayer({ id: 'basemap', type: 'raster', source: 'basemap' }, firstFeatureLayer)
+  }, [basemap])
+
   return (
     <div className="relative">
       <div ref={mapContainer} className="w-full h-[600px] rounded-lg border border-gray-200" />
+      {/* Fit bounds button */}
+      <button
+        title="Fit to layer extent"
+        onClick={() => mapRef.current && fitToBbox(mapRef.current, bbox)}
+        className="absolute top-2.5 left-2.5 bg-white rounded shadow p-1.5 hover:bg-gray-100 transition-colors border border-gray-300"
+      >
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+        </svg>
+      </button>
+      {/* Basemap switcher */}
+      <div className="absolute top-2.5 left-12 flex rounded shadow border border-gray-300 overflow-hidden text-xs">
+        {(Object.keys(BASEMAPS) as BasemapId[]).map((id) => (
+          <button
+            key={id}
+            onClick={() => setBasemap(id)}
+            className={`px-2.5 py-1.5 ${basemap === id ? 'bg-primary-700 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'}`}
+          >
+            {BASEMAPS[id].label}
+          </button>
+        ))}
+      </div>
       {style && <Legend style={style} geometryType={geometryType} />}
     </div>
   )
