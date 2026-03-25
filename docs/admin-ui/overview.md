@@ -15,7 +15,7 @@ The dashboard provides an overview of your Sanson instance:
 Manage workspaces to organize your collections by theme or project:
 
 - Create, rename, and delete workspaces
-- View all collections in each workspace
+- Collection count per workspace (clickable to navigate to collections filtered by workspace)
 - A `default` workspace is always available
 
 ## Collections
@@ -68,11 +68,16 @@ A **Export GeoJSON** button in the collection header exports the full dataset as
 The import page handles file uploads and shows real-time progress:
 
 1. Select a **GeoJSON, CSV, or Shapefile (.zip)** file
-2. Choose the workspace and set the collection name
-3. Optionally configure SRID and format-specific options (CSV separator, geo columns)
-4. Click Import — the file is uploaded and a background job is queued
-5. The progress view shows status, progress bar, feature count, and live logs
-6. On success, click **View collection** to explore the imported data
+2. A **preview panel** appears alongside the form showing:
+   - Metadata badges (format, feature count, geometry type, SRID, CSV separator/geo columns)
+   - Mini-map with sample features (first 100, powered by MapLibre GL)
+   - Sample data table (first 5 rows with column types)
+   - Form fields are auto-filled from the preview (SRID for shapefiles, separator/geo columns for CSV)
+3. Choose the workspace and set the collection name
+4. Optionally adjust SRID and format-specific options (CSV separator, geo columns)
+5. Click Import — the file is uploaded and a background job is queued
+6. The progress view shows status, progress bar, feature count, and live logs
+7. On success, click **View collection** to explore the imported data
 
 The bottom of the page shows the full import history across all collections, filterable by status.
 

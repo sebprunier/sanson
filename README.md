@@ -108,6 +108,7 @@ GET /collections/{id}/style                  Collection style configuration
 GET /api                                     OpenAPI 3.0 specification
 GET /health                                  Database connectivity check
 POST /api/admin/import                       Import a data file (GeoJSON, CSV, Shapefile — async, returns 202)
+POST /api/admin/import/preview               Preview a file before importing (metadata, sample data, map)
 GET  /api/admin/jobs                         List import jobs (status, progress, history)
 GET  /api/admin/jobs/:id                     Get a specific job status
 GET  /api/admin/collections/:id/export            Export collection as GeoJSON

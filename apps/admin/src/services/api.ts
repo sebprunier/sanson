@@ -104,6 +104,25 @@ export interface ImportHistory {
   completed_at: string | null
 }
 
+export interface PreviewResult {
+  format: 'geojson' | 'csv' | 'shapefile'
+  feature_count: number | null
+  geometry_type: string | null
+  srid: number | null
+  fields: Array<{ name: string; type: string }>
+  csv_info?: {
+    separator: string
+    longitude_column: string | null
+    latitude_column: string | null
+  }
+  sample_rows: Array<Record<string, unknown>>
+  sample_geojson: {
+    type: 'FeatureCollection'
+    features: Array<object>
+  } | null
+  bbox: [number, number, number, number] | null
+}
+
 export interface ImportAccepted {
   import_id: string
   status: string
@@ -194,6 +213,15 @@ export const api = {
     },
     delete: (id: string) => request<void>(`/api/admin/collections/${id}`, { method: 'DELETE' }),
     exportUrl: (id: string) => `/api/admin/collections/${id}/export`,
+  },
+
+  preview: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return request<PreviewResult>('/api/admin/import/preview', {
+      method: 'POST',
+      body: form,
+    })
   },
 
   import: (data: {

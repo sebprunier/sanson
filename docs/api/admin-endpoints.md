@@ -135,6 +135,35 @@ Returns the import history for a specific collection, with progress and timing d
 
 ## Import
 
+### Preview a file
+
+```
+POST /api/admin/import/preview
+```
+
+Multipart form data with a single `file` field. Analyzes the file and returns metadata, sample data, and sample GeoJSON without importing anything.
+
+**Response:**
+
+```json
+{
+  "format": "geojson",
+  "feature_count": 1234,
+  "geometry_type": "MultiPolygon",
+  "srid": null,
+  "fields": [
+    { "name": "name", "type": "TEXT" },
+    { "name": "population", "type": "INTEGER" }
+  ],
+  "csv_info": null,
+  "sample_rows": [{ "name": "Paris", "population": 2161000 }],
+  "sample_geojson": { "type": "FeatureCollection", "features": ["...first 100 features..."] },
+  "bbox": [2.22, 48.81, 2.47, 48.9]
+}
+```
+
+For CSV files, `csv_info` includes the detected separator, longitude column, and latitude column. For Shapefiles, `srid` is populated from the `.prj` file. The `sample_geojson` contains up to 100 features for map display.
+
 ### Upload and import a file
 
 ```
@@ -143,15 +172,15 @@ POST /api/admin/import
 
 Multipart form data with the following fields:
 
-| Field          | Type   | Required | Description                                                         |
-| -------------- | ------ | -------- | ------------------------------------------------------------------- |
-| `file`         | file   | Yes      | GeoJSON (`.geojson`, `.json`, `.geojson.gz`, `.gz`) or CSV (`.csv`) |
-| `workspace_id` | string | Yes      | Target workspace UUID                                               |
-| `layer_name`   | string | Yes      | Name for the new collection                                         |
-| `srid`         | number | No       | Source SRID (default: 4326)                                         |
-| `separator`    | string | No       | CSV only — column separator (auto-detected if omitted)              |
-| `longitude`    | string | No       | CSV only — longitude column name (auto-detected if omitted)         |
-| `latitude`     | string | No       | CSV only — latitude column name (auto-detected if omitted)          |
+| Field             | Type   | Required | Description                                                                              |
+| ----------------- | ------ | -------- | ---------------------------------------------------------------------------------------- |
+| `file`            | file   | Yes      | GeoJSON (`.geojson`, `.json`, `.geojson.gz`, `.gz`), CSV (`.csv`), or Shapefile (`.zip`) |
+| `workspace_id`    | string | Yes      | Target workspace UUID                                                                    |
+| `collection_name` | string | Yes      | Name for the collection                                                                  |
+| `srid`            | number | No       | Source SRID (default: 4326)                                                              |
+| `separator`       | string | No       | CSV only — column separator (auto-detected if omitted)                                   |
+| `longitude`       | string | No       | CSV only — longitude column name (auto-detected if omitted)                              |
+| `latitude`        | string | No       | CSV only — latitude column name (auto-detected if omitted)                               |
 
 **Response (202 Accepted):**
 
@@ -192,7 +221,7 @@ Returns full job details including progress, logs, and timing:
 {
   "id": "abc123-...",
   "source_file": "regions.geojson",
-  "layer_name": "regions",
+  "collection_name": "regions",
   "status": "running",
   "progress": 45,
   "total_features": 1000,

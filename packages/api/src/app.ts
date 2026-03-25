@@ -10,6 +10,7 @@ import multipart from '@fastify/multipart'
 import { adminWorkspacesRoutes } from './routes/admin/workspaces'
 import { adminCollectionsRoutes } from './routes/admin/collections'
 import { adminImportRoutes } from './routes/admin/import'
+import { adminPreviewRoutes } from './routes/admin/preview'
 import { adminJobsRoutes } from './routes/admin/jobs'
 import { healthRoutes } from './routes/health'
 import { tileMatrixSetsRoutes } from './routes/tileMatrixSets'
@@ -49,6 +50,7 @@ export function buildApp(db: Pool, options: AppOptions = {}): FastifyInstance {
   app.register(adminWorkspacesRoutes, { db })
   app.register(adminCollectionsRoutes, { db })
   app.register(adminImportRoutes, { db, boss: options.boss })
+  app.register(adminPreviewRoutes)
   app.register(adminJobsRoutes, { db })
   app.register(apiRoutes)
   app.register(healthRoutes, { db })

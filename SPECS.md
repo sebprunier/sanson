@@ -178,13 +178,9 @@ flowchart TD
 
 **GeoJSON ingestion (V1):** direct parsing + batch insert via `ST_GeomFromGeoJSON`. Features are inserted in batches of 500, with progress updated in `sanson_import_history` after each batch.
 
-**Shapefile ingestion (planned):** via `ogr2ogr` (GDAL CLI) for format conversion + reprojection in a single pass, then `COPY` for bulk insert. Depends on pg-boss for async processing.
+**CSV ingestion:** direct parsing + auto-detection of separator and geo columns. Creates `MultiPoint` geometry from lon/lat columns via `ST_MakePoint`. Column types inferred from first 100 rows.
 
-**Implementation notes (from auxalentours-api):**
-
-- ogr2ogr handles format conversion AND reprojection in a single pass
-- Geometries are exported as WKT prefixed with `SRID=4326;` (EWKT) so PostgreSQL recognizes the SRID during COPY
-- For very large geometries (administrative boundaries), upstream simplification can be considered (e.g., `mapshaper -simplify`) — out of scope for V1
+**Shapefile ingestion:** via `ogr2ogr` (GDAL CLI) for direct-to-PostGIS import. Reads ZIP via `/vsizip/`, auto-detects source SRID from `.prj`, reprojects to target SRID, bulk inserts via `COPY` with `-nlt PROMOTE_TO_MULTI`.
 
 ### 5.5 Job queue
 
@@ -308,7 +304,7 @@ This pattern (from auxalentours-api) avoids a second round trip to the database 
 | **CQL2 JSON**                | `http://www.opengis.net/spec/cql2/1.0/req/cql2-json`                     | V2     |
 | **CQL2 Temporal**            | `http://www.opengis.net/spec/cql2/1.0/req/temporal-operators`            | V2     |
 | **CQL2 Spatial** (full)      | `http://www.opengis.net/spec/cql2/1.0/req/spatial-operators`             | V2     |
-| **CRS by Reference**         | `http://www.opengis.net/spec/ogcapi-features-2/1.0/conf/crs`             | V2     |
+| **CRS by Reference**         | `http://www.opengis.net/spec/ogcapi-features-2/1.0/conf/crs`             | V1     |
 
 ### OGC URL mapping
 
@@ -459,7 +455,8 @@ Pagination links are present both in the JSON body (`links`) and in HTTP headers
 
 **Supported formats:**
 
-- GeoJSON (`.geojson`, `.json`)
+- GeoJSON (`.geojson`, `.json`, `.geojson.gz`, `.gz`)
+- CSV (`.csv`) with auto-detection of separator and geo columns
 - Shapefile (`.shp` + `.dbf` + `.prj` in a `.zip`)
 
 **Behaviors:**
@@ -588,6 +585,7 @@ Returns a JSON Schema describing the filterable properties of the collection. Dy
 
 ```
 POST /api/admin/import              Upload file + queue ingestion job (returns 202 Accepted)
+POST /api/admin/import/preview      Preview a file before importing (metadata, sample data, sample GeoJSON)
 GET  /api/admin/jobs                Job history (filterable by status, collection_id, limit/offset)
 GET  /api/admin/jobs/{jobId}        Job state, progress, and logs
 ```
@@ -659,7 +657,7 @@ Single-page React application, served by API nodes.
 
 ### Workspace and Collection management
 
-- List of workspaces → list of collections per workspace
+- List of workspaces with collection count (clickable to filter collections by workspace)
 - Create / edit / delete workspace
 - Create / edit / delete collection
   - Name, description, attribution
@@ -676,7 +674,12 @@ Single-page React application, served by API nodes.
 
 ### Data import
 
-- File upload (GeoJSON or Shapefile ZIP)
+- File upload (GeoJSON, CSV, or Shapefile ZIP)
+- **File preview** — upon file selection, a preview panel appears alongside the form showing:
+  - Metadata badges (format, feature count, geometry type, SRID, CSV separator and geo columns)
+  - Mini-map (MapLibre GL) with sample features (first 100)
+  - Sample data table (first 5 rows with column types)
+  - Auto-fills form fields from preview results (SRID for shapefiles, separator/geo columns for CSV)
 - Workspace and target collection selection (existing or new)
 - Target SRID choice (default: 4326)
 - On submit: receives `202 Accepted` with `import_id`, transitions to progress view
@@ -793,12 +796,11 @@ sanson/
 | Topic               | Description                                                         |
 | ------------------- | ------------------------------------------------------------------- |
 | Object storage      | Replace local storage with S3-compatible storage for uploaded files |
-| Import formats      | CSV with lat/lon columns, GeoPackage                                |
-| Export formats      | GeoJSON, CSV, GeoPackage, Shapefile                                 |
+| Import formats      | GeoPackage                                                          |
+| Export formats      | CSV, GeoPackage, Shapefile (in addition to GeoJSON)                 |
 | CQL2 JSON           | JSON format support for CQL2 filters (`filter-lang=cql2-json`)      |
 | CQL2 Temporal       | Full temporal filters (`T_AFTER`, `T_BEFORE`, `T_DURING`…)          |
 | CQL2 Spatial (full) | All spatial operators (`S_CROSSES`, `S_OVERLAPS`, `S_TOUCHES`…)     |
-| CRS by Reference    | Native exposure in CRS other than WGS84 via `?crs=...`              |
 | Output formats      | CSV and GeoPackage in addition to GeoJSON                           |
 | Tile caching        | MVT tile caching for improved performance                           |
 | OGC API Tiles       | OGC API — Tiles standard conformance                                |

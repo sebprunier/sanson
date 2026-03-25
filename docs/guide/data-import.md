@@ -15,11 +15,16 @@ Sanson supports importing GeoJSON, CSV, and Shapefile data to create geographic 
 
 1. Navigate to the **Import** page in the admin UI
 2. Select a **GeoJSON, CSV, or Shapefile (.zip)** from your computer
-3. Choose the target **workspace** (defaults to `default`)
-4. Set the **collection name** (auto-generated from the filename)
-5. Set the **SRID** (defaults to 4326 / WGS84)
-6. For CSV files, optionally configure the **separator**, **longitude column**, and **latitude column** (all are auto-detected by default)
-7. Click **Import**
+3. A **preview panel** appears alongside the form with:
+   - Metadata badges (format, feature count, geometry type, SRID)
+   - Mini-map showing sample features (first 100)
+   - Sample data table (first 5 rows)
+   - Form fields auto-filled from the preview (SRID, CSV separator, geo columns)
+4. Choose the target **workspace** (defaults to `default`)
+5. Adjust the **collection name** (auto-generated from the filename)
+6. Adjust the **SRID** if needed (defaults to 4326 / WGS84, auto-detected for Shapefiles)
+7. For CSV files, verify the auto-detected **separator**, **longitude column**, and **latitude column**
+8. Click **Import**
 
 The UI transitions to a progress view showing:
 
@@ -38,7 +43,7 @@ On completion, a **View collection** button links directly to the collection det
 curl -X POST http://localhost:3000/api/admin/import \
   -F "file=@data/regions-1000m.geojson" \
   -F "workspace_id=<workspace-uuid>" \
-  -F "layer_name=regions" \
+  -F "collection_name=regions" \
   -F "srid=4326"
 ```
 
@@ -48,7 +53,7 @@ curl -X POST http://localhost:3000/api/admin/import \
 curl -X POST http://localhost:3000/api/admin/import \
   -F "file=@data/gares.csv" \
   -F "workspace_id=<workspace-uuid>" \
-  -F "layer_name=gares" \
+  -F "collection_name=gares" \
   -F "srid=4326" \
   -F "separator=;" \
   -F "longitude=X_WGS84" \
@@ -63,7 +68,7 @@ The `separator`, `longitude`, and `latitude` fields are optional — they are au
 curl -X POST http://localhost:3000/api/admin/import \
   -F "file=@data/AleaRG_2025_86_L93.zip" \
   -F "workspace_id=<workspace-uuid>" \
-  -F "layer_name=alea_argiles" \
+  -F "collection_name=alea_argiles" \
   -F "srid=4326"
 ```
 
