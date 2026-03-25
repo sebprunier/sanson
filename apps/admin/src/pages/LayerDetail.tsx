@@ -863,7 +863,9 @@ function StyleView({ layer, onUpdate }: { layer: Layer; onUpdate: (l: Layer) => 
   )
   const [fillColor, setFillColor] = useState(layer.style?.fill_color ?? '#1B4F72')
   const [fillOpacity, setFillOpacity] = useState(layer.style?.fill_opacity ?? 0.3)
-  const [strokeWidth] = useState(layer.style?.stroke_width ?? 1.5)
+  const [strokeColor, setStrokeColor] = useState(layer.style?.stroke_color ?? '#333333')
+  const [strokeWidth, setStrokeWidth] = useState(layer.style?.stroke_width ?? 1.5)
+  const [showStroke, setShowStroke] = useState((layer.style?.stroke_width ?? 1.5) > 0)
   const [field, setField] = useState(layer.style?.field ?? '')
   const [categories, setCategories] = useState(layer.style?.categories ?? [])
   const [method, setMethod] = useState<'equal_interval' | 'quantile'>(
@@ -880,6 +882,7 @@ function StyleView({ layer, onUpdate }: { layer: Layer; onUpdate: (l: Layer) => 
   const [hasStyle, setHasStyle] = useState(layer.style != null)
 
   // Live preview style — null when no style is active
+  const effectiveStrokeWidth = showStroke ? strokeWidth : 0
   const previewStyle = hasStyle ? buildPreviewStyle() : null
 
   useEffect(() => {
@@ -897,12 +900,16 @@ function StyleView({ layer, onUpdate }: { layer: Layer; onUpdate: (l: Layer) => 
   )
 
   function buildPreviewStyle(): StyleConfig {
+    const strokeProps = {
+      stroke_color: strokeColor,
+      stroke_width: effectiveStrokeWidth,
+    }
     if (styleType === 'single') {
       return {
         type: 'single',
         fill_color: fillColor,
         fill_opacity: fillOpacity,
-        stroke_width: strokeWidth,
+        ...strokeProps,
       }
     }
     if (styleType === 'categorized') {
@@ -911,7 +918,7 @@ function StyleView({ layer, onUpdate }: { layer: Layer; onUpdate: (l: Layer) => 
         field,
         categories,
         fill_opacity: fillOpacity,
-        stroke_width: strokeWidth,
+        ...strokeProps,
         default_color: '#cccccc',
       }
     }
@@ -921,7 +928,7 @@ function StyleView({ layer, onUpdate }: { layer: Layer; onUpdate: (l: Layer) => 
       method,
       classes,
       fill_opacity: fillOpacity,
-      stroke_width: strokeWidth,
+      ...strokeProps,
       default_color: '#cccccc',
     }
   }
@@ -1263,6 +1270,52 @@ function StyleView({ layer, onUpdate }: { layer: Layer; onUpdate: (l: Layer) => 
             )}
           </div>
         )}
+
+        {/* Stroke controls — shared across all style types */}
+        <div className="space-y-3 border-t border-gray-200 pt-4">
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="showStroke"
+              checked={showStroke}
+              onChange={(e) => setShowStroke(e.target.checked)}
+              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            />
+            <label htmlFor="showStroke" className="text-sm font-medium text-gray-700">
+              Stroke (border)
+            </label>
+          </div>
+          {showStroke && (
+            <div className="flex gap-4 items-end">
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Color</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={strokeColor}
+                    onChange={(e) => setStrokeColor(e.target.value)}
+                    className="w-10 h-8 rounded border border-gray-300 cursor-pointer"
+                  />
+                  <span className="text-sm text-gray-500 font-mono">{strokeColor}</span>
+                </div>
+              </div>
+              <div className="flex-1">
+                <label className="block text-sm text-gray-600 mb-1">
+                  Width: {strokeWidth.toFixed(1)}px
+                </label>
+                <input
+                  type="range"
+                  min="0.5"
+                  max="5"
+                  step="0.5"
+                  value={strokeWidth}
+                  onChange={(e) => setStrokeWidth(parseFloat(e.target.value))}
+                  className="w-full"
+                />
+              </div>
+            </div>
+          )}
+        </div>
 
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">

@@ -53,6 +53,11 @@ function defaultPaint(geometryType: string | null): MaplibrePaint {
   }
 }
 
+function strokeLine(strokeColor: string, strokeWidth: number): Record<string, unknown> | undefined {
+  if (strokeWidth === 0) return undefined
+  return { 'line-color': strokeColor, 'line-width': strokeWidth }
+}
+
 function singlePaint(style: StyleConfig, geom: string): MaplibrePaint {
   const color = style.fill_color ?? DEFAULT_FILL_COLOR
   const opacity = style.fill_opacity ?? DEFAULT_FILL_OPACITY
@@ -63,7 +68,7 @@ function singlePaint(style: StyleConfig, geom: string): MaplibrePaint {
   if (geom.includes('polygon')) {
     return {
       fill: { 'fill-color': color, 'fill-opacity': opacity },
-      line: { 'line-color': strokeColor, 'line-width': strokeWidth },
+      line: strokeLine(strokeColor, strokeWidth),
     }
   }
   if (geom.includes('line')) {
@@ -99,7 +104,7 @@ function categorizedPaint(style: StyleConfig, geom: string): MaplibrePaint {
   if (geom.includes('polygon')) {
     return {
       fill: { 'fill-color': matchExpr, 'fill-opacity': opacity },
-      line: { 'line-color': strokeColor, 'line-width': strokeWidth },
+      line: strokeLine(strokeColor, strokeWidth),
     }
   }
   if (geom.includes('line')) {
@@ -133,7 +138,7 @@ function graduatedPaint(style: StyleConfig, geom: string): MaplibrePaint {
   if (geom.includes('polygon')) {
     return {
       fill: { 'fill-color': stepExpr, 'fill-opacity': opacity },
-      line: { 'line-color': strokeColor, 'line-width': strokeWidth },
+      line: strokeLine(strokeColor, strokeWidth),
     }
   }
   if (geom.includes('line')) {
