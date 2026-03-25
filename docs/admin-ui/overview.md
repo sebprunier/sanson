@@ -27,48 +27,52 @@ Browse and manage your geographic layers:
 
 ### Layer detail
 
-The layer detail page has four tabs:
+The layer detail page has six tabs:
 
-**Map view** — interactive map powered by MapLibre GL JS with vector tile rendering. Includes zoom, pan, and feature inspection on click.
+**Map** — interactive map powered by MapLibre GL JS with vector tile rendering. Features:
 
-**Table view** — tabular display of features with column sorting. Features are loaded with pagination.
+- Auto-zoom to layer extent (fitBounds) on load
+- **Fit bounds button** (top-left) to re-center the map on the layer extent
+- **Basemap switcher** (top-left) with three options: OSM (default), Light (CartoDB grayscale), Satellite (Esri World Imagery)
+- Feature inspection on click (popup with all properties)
+- Legend overlay when a style is configured
 
-**Schema view** — lists all columns in the layer's data table with their PostgreSQL types and basic statistics (distinct values, null count).
+**Table** — tabular display of features with column sorting. Features are loaded with pagination.
 
-**Settings view** — configure the layer's metadata and API behavior:
+**Schema** — lists all columns in the layer's data table with their PostgreSQL types and basic statistics (distinct values, null count).
+
+**History** — import history for the layer, showing date, source file, status, progress, feature count, and duration.
+
+**Settings** — configure the layer's metadata and API behavior:
 
 - **Workspace** — move the layer to a different workspace
 - **Description** and **Attribution** — free-text metadata
 - **Datetime column** — select which column to use for OGC `?datetime=` temporal filtering
 - **Exposed fields** — choose which columns are visible in the OGC API, with optional aliases. See [Exposed Fields](/api/admin-endpoints#exposed-fields).
 
-**Style view** — configure how the layer is rendered on the map:
+**Style** — configure how the layer is rendered on the map:
 
 - **Single** — one color for all features, with color picker and opacity slider
 - **Categorized** — map unique values of a column to colors (auto-classify from data)
-- **Graduated** — map numeric ranges to a color ramp (quantile breakpoints, configurable number of classes)
-- Color palette selector, per-entry color override, optional labels
+- **Graduated** — map numeric ranges to a color ramp (quantile or equal interval, configurable number of classes)
+- Color palette selector (blues, greens, reds, oranges, purples, spectral, qualitative)
+- Per-entry color override and optional labels
+- **Stroke controls** — toggle border visibility, set color and width (0.5–5px)
+- Fill opacity slider
 - Live map preview alongside the editor
 
-A **Download GeoJSON** button in the layer header exports the full dataset as a GeoJSON file.
-
-### Import history
-
-Each layer's detail page shows its import history with:
-
-- Date, source file, status
-- Progress bar for running imports
-- Feature count and duration
+A **Export GeoJSON** button in the layer header exports the full dataset as a GeoJSON file.
 
 ## Data Import
 
 The import page handles file uploads and shows real-time progress:
 
-1. Select a GeoJSON file
+1. Select a **GeoJSON, CSV, or Shapefile (.zip)** file
 2. Choose the workspace and set the layer name
-3. Click Import — the file is uploaded and a background job is queued
-4. The progress view shows status, progress bar, feature count, and live logs
-5. On success, click **View layer** to explore the imported data
+3. Optionally configure SRID and format-specific options (CSV separator, geo columns)
+4. Click Import — the file is uploaded and a background job is queued
+5. The progress view shows status, progress bar, feature count, and live logs
+6. On success, click **View layer** to explore the imported data
 
 The bottom of the page shows the full import history across all layers, filterable by status.
 

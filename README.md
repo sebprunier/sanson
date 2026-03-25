@@ -27,7 +27,7 @@ Sanson exposes geographic data stored in PostgreSQL/PostGIS via clean, modern RE
 - **OGC API — Features compliant** — compatible out of the box with QGIS, ArcGIS, FME, and any OGC-compliant client
 - **CQL2 filtering** — filter features by attributes and geometry using the OGC CQL2 Text standard (`=`, `<>`, `<`, `>`, `AND`, `OR`, `NOT`, `LIKE`, `IN`, `IS NULL`, `S_INTERSECTS`, `S_WITHIN`, `S_CONTAINS`)
 - **Bbox, datetime, and proximity filtering** — spatial bounding box, temporal filters (OGC Core), and `lat`+`lon`+`radius` geographic shortcuts
-- **Async GeoJSON import** — background import via pg-boss with progress tracking, batch inserts, and import history. Supports plain and gzip-compressed GeoJSON (`.geojson`, `.json`, `.geojson.gz`, `.gz`)
+- **Async data import** — background import via pg-boss with progress tracking, batch inserts, and import history. Supports GeoJSON (`.geojson`, `.json`, `.geojson.gz`, `.gz`), CSV (`.csv` with auto-detection of separator and geo columns), and Shapefile (`.zip` via `ogr2ogr` with SRID auto-detection and reprojection)
 - **Queryables** — discover filterable properties for each collection
 - **OGC pagination** — `self`, `next`, `prev`, `first`, `last` links in body and HTTP `Link` header + `X-Total-Count`
 - **Web admin UI** — dashboard, workspace and layer management, data import, interactive map and table views with CQL2 filter
@@ -38,10 +38,6 @@ Sanson exposes geographic data stored in PostgreSQL/PostGIS via clean, modern RE
 - **Workspaces** — organize layers by theme or project
 - **Vector tiles (MVT)** — Mapbox Vector Tiles via `ST_AsMVT` at `/collections/{id}/tiles/{z}/{x}/{y}.pbf`
 - **OpenAPI documentation** — auto-generated from route schemas
-
-### Planned
-
-- **Shapefile import** — via `ogr2ogr` with SRID detection and reprojection
 
 ## What Sanson is not
 
@@ -69,6 +65,7 @@ Sanson exposes geographic data stored in PostgreSQL/PostGIS via clean, modern RE
 - [Node.js 24](https://nodejs.org) (via [nvm](https://github.com/nvm-sh/nvm): `nvm use`)
 - [pnpm](https://pnpm.io): `npm install -g pnpm`
 - [Docker](https://www.docker.com) (for the database and integration tests)
+- [GDAL/ogr2ogr](https://gdal.org) (optional, required for Shapefile import — `gdal-bin` on Debian/Ubuntu, `gdal` on macOS via Homebrew)
 
 ### Setup
 
@@ -110,7 +107,7 @@ GET /collections/{id}/tiles/{z}/{x}/{y}.pbf  Mapbox Vector Tile (MVT)
 GET /collections/{id}/style                  Collection style configuration
 GET /api                                     OpenAPI 3.0 specification
 GET /health                                  Database connectivity check
-POST /api/admin/import                       Import a GeoJSON file (async, returns 202)
+POST /api/admin/import                       Import a data file (GeoJSON, CSV, Shapefile — async, returns 202)
 GET  /api/admin/jobs                         List import jobs (status, progress, history)
 GET  /api/admin/jobs/:id                     Get a specific job status
 GET  /api/admin/layers/:id/export            Export layer as GeoJSON
