@@ -15,7 +15,7 @@ test.describe('Import', () => {
     await expect(page.getByRole('button', { name: 'Import' })).toBeDisabled()
   })
 
-  test('auto-fills layer name from file name', async ({ page }) => {
+  test('auto-fills collection name from file name', async ({ page }) => {
     await page.goto('/import')
     const fileInput = page.locator('input[type="file"]')
     const geojsonPath = path.resolve(
@@ -23,8 +23,8 @@ test.describe('Import', () => {
       '../../../data/centrales-de-production-nucleaire-edf.geojson',
     )
     await fileInput.setInputFiles(geojsonPath)
-    const layerNameInput = page.locator('input[placeholder="e.g. nuclear_plants"]')
-    await expect(layerNameInput).toHaveValue('centrales_de_production_nucleaire_edf')
+    const collectionNameInput = page.locator('input[placeholder="e.g. nuclear_plants"]')
+    await expect(collectionNameInput).toHaveValue('centrales_de_production_nucleaire_edf')
     await expect(page.getByRole('button', { name: 'Import' })).toBeEnabled()
   })
 })

@@ -95,7 +95,7 @@ describe('GET /collections/:collectionId/tiles', () => {
       CREATE TABLE data_tilelayer (id SERIAL PRIMARY KEY, geom GEOMETRY(Point, 4326), name TEXT)
     `)
     await db.query(
-      `INSERT INTO sanson_layers (workspace_id, name, table_name, srid, bbox)
+      `INSERT INTO sanson_collections (workspace_id, name, table_name, srid, bbox)
        VALUES ('00000000-0000-0000-0000-000000000080', 'tilelayer', 'data_tilelayer', 4326,
                '[-5.1, 41.3, 9.6, 51.1]'::jsonb)`,
     )

@@ -12,8 +12,8 @@ CREATE TABLE IF NOT EXISTS sanson_workspaces (
     updated_at  TIMESTAMPTZ DEFAULT now()
 );
 
--- Layers (= OGC Collections)
-CREATE TABLE IF NOT EXISTS sanson_layers (
+-- Collections (OGC API Features collections)
+CREATE TABLE IF NOT EXISTS sanson_collections (
     id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id      UUID REFERENCES sanson_workspaces(id) ON DELETE CASCADE,
     name              VARCHAR(100) NOT NULL,
@@ -43,7 +43,7 @@ ON CONFLICT DO NOTHING;
 -- Import history (also serves as job tracking table)
 CREATE TABLE IF NOT EXISTS sanson_import_history (
     id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    layer_id           UUID REFERENCES sanson_layers(id) ON DELETE CASCADE,
+    collection_id      UUID REFERENCES sanson_collections(id) ON DELETE CASCADE,
     job_id             UUID,
     source_file        VARCHAR(500),
     source_srid        INTEGER,

@@ -31,14 +31,14 @@ export async function adminImportRoutes(
       tags: ['Admin'],
       summary: 'Import a data file',
       description:
-        'Queue an asynchronous import of a GeoJSON or CSV file into a new or existing layer',
+        'Queue an asynchronous import of a GeoJSON or CSV file into a new or existing collection',
       consumes: ['multipart/form-data'],
     },
     handler: async (request, reply) => {
       const parts = request.parts()
 
       let workspaceId: string | undefined
-      let layerName: string | undefined
+      let collectionName: string | undefined
       let srid = 4326
       let separator: string | undefined
       let longitudeColumn: string | undefined
@@ -55,7 +55,7 @@ export async function adminImportRoutes(
       for await (const part of parts) {
         if (part.type === 'field') {
           if (part.fieldname === 'workspace_id') workspaceId = part.value as string
-          if (part.fieldname === 'layer_name') layerName = part.value as string
+          if (part.fieldname === 'collection_name') collectionName = part.value as string
           if (part.fieldname === 'srid') srid = parseInt(part.value as string, 10) || 4326
           if (part.fieldname === 'separator') separator = part.value as string
           if (part.fieldname === 'longitude') longitudeColumn = part.value as string
@@ -79,12 +79,12 @@ export async function adminImportRoutes(
       }
 
       const hasFile = fileBuffer || streamedFilePath
-      if (!workspaceId || !layerName || !hasFile) {
+      if (!workspaceId || !collectionName || !hasFile) {
         reply.status(400)
         return {
           statusCode: 400,
           error: 'Bad Request',
-          message: 'Missing required fields: workspace_id, layer_name, file',
+          message: 'Missing required fields: workspace_id, collection_name, file',
         }
       }
 
@@ -185,7 +185,7 @@ export async function adminImportRoutes(
         `INSERT INTO sanson_import_history (source_file, source_srid, target_srid, total_features, status)
          VALUES ($1, $2, $3, $4, 'pending')
          RETURNING id`,
-        [sourceFileName ?? layerName, srid, srid, totalFeatures],
+        [sourceFileName ?? collectionName, srid, srid, totalFeatures],
       )
       const importHistoryId = historyRows[0].id
 
@@ -205,9 +205,9 @@ export async function adminImportRoutes(
         importHistoryId,
         filePath,
         workspaceId,
-        layerName,
+        collectionName,
         srid,
-        sourceFileName: sourceFileName ?? layerName,
+        sourceFileName: sourceFileName ?? collectionName,
         format,
         ...(isCsv && (separator || longitudeColumn || latitudeColumn)
           ? {

@@ -17,7 +17,7 @@ export interface IngestJobPayload {
   importHistoryId: string
   filePath: string
   workspaceId: string
-  layerName: string
+  collectionName: string
   srid: number
   sourceFileName: string
   format?: 'geojson' | 'csv' | 'shapefile'

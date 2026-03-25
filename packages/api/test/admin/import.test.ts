@@ -87,7 +87,7 @@ describe('POST /api/admin/import (async)', () => {
 
     const form = new FormData()
     form.append('workspace_id', workspaceId)
-    form.append('layer_name', 'centrales')
+    form.append('collection_name', 'centrales')
     form.append('file', geojsonBuffer, {
       filename: 'centrales.geojson',
       contentType: 'application/json',
@@ -211,7 +211,7 @@ describe('POST /api/admin/import (async)', () => {
 
     const form = new FormData()
     form.append('workspace_id', workspaceId)
-    // Missing layer_name and file
+    // Missing collection_name and file
 
     const response = await app.inject({
       method: 'POST',
@@ -230,7 +230,7 @@ describe('POST /api/admin/import (async)', () => {
 
     const form = new FormData()
     form.append('workspace_id', '00000000-0000-0000-0000-999999999999')
-    form.append('layer_name', 'test')
+    form.append('collection_name', 'test')
     form.append('file', geojsonBuffer, {
       filename: 'test.geojson',
       contentType: 'application/json',
@@ -255,7 +255,7 @@ describe('POST /api/admin/import (async)', () => {
 
     const form = new FormData()
     form.append('workspace_id', workspaceId)
-    form.append('layer_name', 'gares_csv')
+    form.append('collection_name', 'gares_csv')
     form.append('file', csvSemicolon, {
       filename: 'gares.csv',
       contentType: 'text/csv',
@@ -293,13 +293,13 @@ describe('POST /api/admin/import (async)', () => {
 
     expect(status).toBe('completed')
 
-    // Verify layer was created with correct geometry type
-    const { rows: layerRows } = await db.query(
-      `SELECT geometry_type, feature_count FROM sanson_layers WHERE name = 'gares_csv'`,
+    // Verify collection was created with correct geometry type
+    const { rows: collectionRows } = await db.query(
+      `SELECT geometry_type, feature_count FROM sanson_collections WHERE name = 'gares_csv'`,
     )
-    expect(layerRows).toHaveLength(1)
-    expect(layerRows[0].geometry_type).toBe('MultiPoint')
-    expect(Number(layerRows[0].feature_count)).toBe(3)
+    expect(collectionRows).toHaveLength(1)
+    expect(collectionRows[0].geometry_type).toBe('MultiPoint')
+    expect(Number(collectionRows[0].feature_count)).toBe(3)
 
     // Verify features are accessible via OGC API
     const app = buildApp(db)
@@ -347,7 +347,7 @@ describe('POST /api/admin/import (async)', () => {
 
     const form = new FormData()
     form.append('workspace_id', workspaceId)
-    form.append('layer_name', 'cities_csv')
+    form.append('collection_name', 'cities_csv')
     form.append('file', csvComma, {
       filename: 'cities.csv',
       contentType: 'text/csv',
@@ -381,10 +381,10 @@ describe('POST /api/admin/import (async)', () => {
     expect(status).toBe('completed')
 
     // Check feature count
-    const { rows: layerRows } = await db.query(
-      `SELECT feature_count FROM sanson_layers WHERE name = 'cities_csv'`,
+    const { rows: collectionRows } = await db.query(
+      `SELECT feature_count FROM sanson_collections WHERE name = 'cities_csv'`,
     )
-    expect(Number(layerRows[0].feature_count)).toBe(2)
+    expect(Number(collectionRows[0].feature_count)).toBe(2)
     await db.end()
   })
 
@@ -394,7 +394,7 @@ describe('POST /api/admin/import (async)', () => {
 
     const form = new FormData()
     form.append('workspace_id', workspaceId)
-    form.append('layer_name', 'gares_explicit')
+    form.append('collection_name', 'gares_explicit')
     form.append('separator', ';')
     form.append('longitude', 'X_WGS84')
     form.append('latitude', 'Y_WGS84')
@@ -430,10 +430,10 @@ describe('POST /api/admin/import (async)', () => {
 
     expect(status).toBe('completed')
 
-    const { rows: layerRows } = await db.query(
-      `SELECT feature_count FROM sanson_layers WHERE name = 'gares_explicit'`,
+    const { rows: collectionRows } = await db.query(
+      `SELECT feature_count FROM sanson_collections WHERE name = 'gares_explicit'`,
     )
-    expect(Number(layerRows[0].feature_count)).toBe(3)
+    expect(Number(collectionRows[0].feature_count)).toBe(3)
     await db.end()
   })
 
@@ -443,7 +443,7 @@ describe('POST /api/admin/import (async)', () => {
 
     const form = new FormData()
     form.append('workspace_id', workspaceId)
-    form.append('layer_name', 'nogeo')
+    form.append('collection_name', 'nogeo')
     form.append('file', csvNoGeo, {
       filename: 'nogeo.csv',
       contentType: 'text/csv',
@@ -489,7 +489,7 @@ describe('POST /api/admin/import (async)', () => {
 
     const form = new FormData()
     form.append('workspace_id', workspaceId)
-    form.append('layer_name', 'alea_rg')
+    form.append('collection_name', 'alea_rg')
     form.append('srid', '4326')
     form.append('file', shapefileBuffer, {
       filename: 'AleaRG_2025_86_L93.zip',
@@ -574,13 +574,13 @@ describe('POST /api/admin/import (async)', () => {
     async () => {
       const db = new Pool({ connectionString: container.getConnectionUri() })
 
-      // Verify layer metadata
-      const { rows: layerRows } = await db.query(
-        `SELECT srid, geometry_type, feature_count FROM sanson_layers WHERE name = 'alea_rg'`,
+      // Verify collection metadata
+      const { rows: collectionRows } = await db.query(
+        `SELECT srid, geometry_type, feature_count FROM sanson_collections WHERE name = 'alea_rg'`,
       )
-      expect(layerRows).toHaveLength(1)
-      expect(layerRows[0].srid).toBe(4326) // reprojected from 2154
-      expect(layerRows[0].geometry_type).toBe('MultiPolygon') // promoted from Polygon
+      expect(collectionRows).toHaveLength(1)
+      expect(collectionRows[0].srid).toBe(4326) // reprojected from 2154
+      expect(collectionRows[0].geometry_type).toBe('MultiPolygon') // promoted from Polygon
 
       // Verify data is actually in EPSG:4326 (coordinates should be in lon/lat range)
       const { rows: geomRows } = await db.query(
@@ -603,10 +603,10 @@ describe('POST /api/admin/import (async)', () => {
     const appDb = new Pool({ connectionString: container.getConnectionUri() })
     const app = buildApp(appDb, { boss })
 
-    // Re-import same shapefile with same layer name
+    // Re-import same shapefile with same collection name
     const form = new FormData()
     form.append('workspace_id', workspaceId)
-    form.append('layer_name', 'alea_rg')
+    form.append('collection_name', 'alea_rg')
     form.append('srid', '4326')
     form.append('file', shapefileBuffer, {
       filename: 'AleaRG_2025_86_L93.zip',

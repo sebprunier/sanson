@@ -61,9 +61,9 @@ describe('GET /collections/:collectionId/items — real data (nuclear plants)', 
       )
     }
 
-    // Register the layer
+    // Register the collection
     await db.query(
-      `INSERT INTO sanson_layers (workspace_id, name, description, table_name, geometry_column, id_column, srid)
+      `INSERT INTO sanson_collections (workspace_id, name, description, table_name, geometry_column, id_column, srid)
        VALUES ('00000000-0000-0000-0000-000000000030', 'centrales', 'EDF nuclear power plants', 'energie_centrales', 'geom', 'id', 4326)`,
     )
 

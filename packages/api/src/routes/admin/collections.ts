@@ -1,11 +1,11 @@
 import { FastifyInstance } from 'fastify'
 import { Pool } from 'pg'
 
-interface LayersRouteOptions {
+interface CollectionsRouteOptions {
   db: Pool
 }
 
-interface LayerRow {
+interface CollectionRow {
   id: string
   workspace_id: string
   workspace_name: string
@@ -26,7 +26,7 @@ interface LayerRow {
   updated_at: string
 }
 
-interface CreateLayerBody {
+interface CreateCollectionBody {
   workspace_id: string
   name: string
   description?: string
@@ -57,7 +57,7 @@ interface StyleConfig {
   default_color?: string
 }
 
-interface UpdateLayerBody {
+interface UpdateCollectionBody {
   workspace_id?: string
   name?: string
   description?: string
@@ -71,17 +71,17 @@ interface UpdateLayerBody {
   srid?: number
 }
 
-function buildExportPropertiesExpr(layer: LayerRow): string {
-  if (!layer.exposed_fields || layer.exposed_fields.length === 0) {
-    return `to_jsonb(t.*) - '${layer.id_column}' - '${layer.geometry_column}'`
+function buildExportPropertiesExpr(collection: CollectionRow): string {
+  if (!collection.exposed_fields || collection.exposed_fields.length === 0) {
+    return `to_jsonb(t.*) - '${collection.id_column}' - '${collection.geometry_column}'`
   }
-  const pairs = layer.exposed_fields
+  const pairs = collection.exposed_fields
     .map((f) => `'${f.alias ?? f.source}', t."${f.source}"`)
     .join(', ')
   return `jsonb_build_object(${pairs})`
 }
 
-const layerSchema = {
+const collectionSchema = {
   type: 'object',
   properties: {
     id: { type: 'string' },
@@ -113,73 +113,76 @@ const layerSchema = {
   },
 } as const
 
-const LAYER_SELECT = `
-  SELECT l.id, l.workspace_id, w.name AS workspace_name, l.name, l.description, l.attribution,
-         l.table_name, l.geometry_column, l.geometry_type, l.id_column, l.datetime_column, l.exposed_fields, l.style, l.srid,
-         l.bbox, l.feature_count, l.created_at, l.updated_at
-  FROM sanson_layers l
-  JOIN sanson_workspaces w ON w.id = l.workspace_id
+const COLLECTION_SELECT = `
+  SELECT c.id, c.workspace_id, w.name AS workspace_name, c.name, c.description, c.attribution,
+         c.table_name, c.geometry_column, c.geometry_type, c.id_column, c.datetime_column, c.exposed_fields, c.style, c.srid,
+         c.bbox, c.feature_count, c.created_at, c.updated_at
+  FROM sanson_collections c
+  JOIN sanson_workspaces w ON w.id = c.workspace_id
 `
 
-export async function adminLayersRoutes(
+export async function adminCollectionsRoutes(
   app: FastifyInstance,
-  options: LayersRouteOptions,
+  options: CollectionsRouteOptions,
 ): Promise<void> {
-  // GET /api/admin/layers
-  app.get<{ Querystring: { workspace_id?: string } }>('/api/admin/layers', {
+  // GET /api/admin/collections
+  app.get<{ Querystring: { workspace_id?: string } }>('/api/admin/collections', {
     schema: {
       tags: ['Admin'],
-      summary: 'List layers',
+      summary: 'List collections',
       querystring: {
         type: 'object',
         properties: {
           workspace_id: { type: 'string', description: 'Filter by workspace' },
         },
       },
-      response: { 200: { type: 'array', items: layerSchema } },
+      response: { 200: { type: 'array', items: collectionSchema } },
     },
     handler: async (request) => {
       if (request.query.workspace_id) {
-        const { rows } = await options.db.query<LayerRow>(
-          `${LAYER_SELECT} WHERE l.workspace_id = $1 ORDER BY l.name`,
+        const { rows } = await options.db.query<CollectionRow>(
+          `${COLLECTION_SELECT} WHERE c.workspace_id = $1 ORDER BY c.name`,
           [request.query.workspace_id],
         )
         return rows
       }
-      const { rows } = await options.db.query<LayerRow>(`${LAYER_SELECT} ORDER BY w.name, l.name`)
+      const { rows } = await options.db.query<CollectionRow>(
+        `${COLLECTION_SELECT} ORDER BY w.name, c.name`,
+      )
       return rows
     },
   })
 
-  // GET /api/admin/layers/:id
-  app.get<{ Params: { id: string } }>('/api/admin/layers/:id', {
+  // GET /api/admin/collections/:id
+  app.get<{ Params: { id: string } }>('/api/admin/collections/:id', {
     schema: {
       tags: ['Admin'],
-      summary: 'Layer details',
+      summary: 'Collection details',
       params: {
         type: 'object',
         properties: { id: { type: 'string' } },
         required: ['id'],
       },
-      response: { 200: layerSchema },
+      response: { 200: collectionSchema },
     },
     handler: async (request, reply) => {
-      const { rows } = await options.db.query<LayerRow>(`${LAYER_SELECT} WHERE l.id = $1`, [
-        request.params.id,
-      ])
+      const { rows } = await options.db.query<CollectionRow>(
+        `${COLLECTION_SELECT} WHERE c.id = $1`,
+        [request.params.id],
+      )
       if (rows.length === 0) {
         reply.status(404)
-        return { statusCode: 404, error: 'Not Found', message: 'Layer not found' }
+        return { statusCode: 404, error: 'Not Found', message: 'Collection not found' }
       }
       return rows[0]
     },
   })
 
-  // POST /api/admin/layers
-  app.post<{ Body: CreateLayerBody }>('/api/admin/layers', {
+  // POST /api/admin/collections
+  app.post<{ Body: CreateCollectionBody }>('/api/admin/collections', {
     schema: {
       tags: ['Admin'],
-      summary: 'Create a layer',
+      summary: 'Create a collection',
       body: {
         type: 'object',
         properties: {
@@ -195,13 +198,13 @@ export async function adminLayersRoutes(
         },
         required: ['workspace_id', 'name', 'table_name'],
       },
-      response: { 201: layerSchema },
+      response: { 201: collectionSchema },
     },
     handler: async (request, reply) => {
       const b = request.body
       try {
         const { rows } = await options.db.query<{ id: string }>(
-          `INSERT INTO sanson_layers (workspace_id, name, description, attribution, table_name, geometry_column, geometry_type, id_column, srid)
+          `INSERT INTO sanson_collections (workspace_id, name, description, attribution, table_name, geometry_column, geometry_type, id_column, srid)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
            RETURNING id`,
           [
@@ -217,9 +220,10 @@ export async function adminLayersRoutes(
           ],
         )
         // Fetch the full row with workspace name
-        const result = await options.db.query<LayerRow>(`${LAYER_SELECT} WHERE l.id = $1`, [
-          rows[0].id,
-        ])
+        const result = await options.db.query<CollectionRow>(
+          `${COLLECTION_SELECT} WHERE c.id = $1`,
+          [rows[0].id],
+        )
         reply.status(201)
         return result.rows[0]
       } catch (err: unknown) {
@@ -229,7 +233,7 @@ export async function adminLayersRoutes(
           return {
             statusCode: 409,
             error: 'Conflict',
-            message: `Layer '${b.name}' already exists in this workspace`,
+            message: `Collection '${b.name}' already exists in this workspace`,
           }
         }
         if (pgErr.code === '23503') {
@@ -241,11 +245,11 @@ export async function adminLayersRoutes(
     },
   })
 
-  // PUT /api/admin/layers/:id
-  app.put<{ Params: { id: string }; Body: UpdateLayerBody }>('/api/admin/layers/:id', {
+  // PUT /api/admin/collections/:id
+  app.put<{ Params: { id: string }; Body: UpdateCollectionBody }>('/api/admin/collections/:id', {
     schema: {
       tags: ['Admin'],
-      summary: 'Update a layer',
+      summary: 'Update a collection',
       params: {
         type: 'object',
         properties: { id: { type: 'string' } },
@@ -275,7 +279,7 @@ export async function adminLayersRoutes(
           srid: { type: 'integer' },
         },
       },
-      response: { 200: layerSchema },
+      response: { 200: collectionSchema },
     },
     handler: async (request, reply) => {
       const b = request.body
@@ -310,12 +314,13 @@ export async function adminLayersRoutes(
       addField('srid', b.srid)
 
       if (sets.length === 0) {
-        const result = await options.db.query<LayerRow>(`${LAYER_SELECT} WHERE l.id = $1`, [
-          request.params.id,
-        ])
+        const result = await options.db.query<CollectionRow>(
+          `${COLLECTION_SELECT} WHERE c.id = $1`,
+          [request.params.id],
+        )
         if (result.rows.length === 0) {
           reply.status(404)
-          return { statusCode: 404, error: 'Not Found', message: 'Layer not found' }
+          return { statusCode: 404, error: 'Not Found', message: 'Collection not found' }
         }
         return result.rows[0]
       }
@@ -323,25 +328,25 @@ export async function adminLayersRoutes(
       sets.push('updated_at = now()')
 
       const { rows } = await options.db.query<{ id: string }>(
-        `UPDATE sanson_layers SET ${sets.join(', ')} WHERE id = $1 RETURNING id`,
+        `UPDATE sanson_collections SET ${sets.join(', ')} WHERE id = $1 RETURNING id`,
         params,
       )
       if (rows.length === 0) {
         reply.status(404)
-        return { statusCode: 404, error: 'Not Found', message: 'Layer not found' }
+        return { statusCode: 404, error: 'Not Found', message: 'Collection not found' }
       }
-      const result = await options.db.query<LayerRow>(`${LAYER_SELECT} WHERE l.id = $1`, [
+      const result = await options.db.query<CollectionRow>(`${COLLECTION_SELECT} WHERE c.id = $1`, [
         rows[0].id,
       ])
       return result.rows[0]
     },
   })
 
-  // GET /api/admin/layers/:id/schema
-  app.get<{ Params: { id: string } }>('/api/admin/layers/:id/schema', {
+  // GET /api/admin/collections/:id/schema
+  app.get<{ Params: { id: string } }>('/api/admin/collections/:id/schema', {
     schema: {
       tags: ['Admin'],
-      summary: 'Layer schema with column statistics',
+      summary: 'Collection schema with column statistics',
       params: {
         type: 'object',
         properties: { id: { type: 'string' } },
@@ -349,15 +354,15 @@ export async function adminLayersRoutes(
       },
     },
     handler: async (request, reply) => {
-      const { rows: layerRows } = await options.db.query<LayerRow>(
-        `${LAYER_SELECT} WHERE l.id = $1`,
+      const { rows: collectionRows } = await options.db.query<CollectionRow>(
+        `${COLLECTION_SELECT} WHERE c.id = $1`,
         [request.params.id],
       )
-      if (layerRows.length === 0) {
+      if (collectionRows.length === 0) {
         reply.status(404)
-        return { statusCode: 404, error: 'Not Found', message: 'Layer not found' }
+        return { statusCode: 404, error: 'Not Found', message: 'Collection not found' }
       }
-      const layer = layerRows[0]
+      const collection = collectionRows[0]
 
       // Get columns from information_schema
       const { rows: columns } = await options.db.query<{
@@ -369,11 +374,11 @@ export async function adminLayersRoutes(
          FROM information_schema.columns
          WHERE table_name = $1
          ORDER BY ordinal_position`,
-        [layer.table_name],
+        [collection.table_name],
       )
 
       // Build stats query for each non-geometry column
-      const statColumns = columns.filter((c) => c.column_name !== layer.geometry_column)
+      const statColumns = columns.filter((c) => c.column_name !== collection.geometry_column)
       const statExpressions = statColumns.map((c) => {
         const col = `"${c.column_name}"`
         return `
@@ -387,7 +392,7 @@ export async function adminLayersRoutes(
       if (statExpressions.length > 0) {
         const totalCountExpr = `COUNT(*) AS total_count`
         const { rows } = await options.db.query(
-          `SELECT ${totalCountExpr}, ${statExpressions.join(',')} FROM ${layer.table_name}`,
+          `SELECT ${totalCountExpr}, ${statExpressions.join(',')} FROM ${collection.table_name}`,
         )
         statsRow = rows[0] ?? {}
       }
@@ -395,14 +400,14 @@ export async function adminLayersRoutes(
       const totalCount = Number(statsRow.total_count ?? 0)
 
       const result = columns.map((c) => {
-        const isGeom = c.column_name === layer.geometry_column
+        const isGeom = c.column_name === collection.geometry_column
         const base = {
           column: c.column_name,
           type: c.data_type,
           nullable: c.is_nullable === 'YES',
         }
         if (isGeom) {
-          return { ...base, geometry_type: layer.geometry_type, srid: layer.srid }
+          return { ...base, geometry_type: collection.geometry_type, srid: collection.srid }
         }
         const nonNull = Number(statsRow[`${c.column_name}__non_null`] ?? 0)
         return {
@@ -419,11 +424,11 @@ export async function adminLayersRoutes(
     },
   })
 
-  // GET /api/admin/layers/:id/classify
+  // GET /api/admin/collections/:id/classify
   app.get<{
     Params: { id: string }
     Querystring: { field: string; type: 'categorized' | 'graduated'; classes?: string }
-  }>('/api/admin/layers/:id/classify', {
+  }>('/api/admin/collections/:id/classify', {
     schema: {
       tags: ['Admin'],
       summary: 'Auto-classify a column for styling',
@@ -443,15 +448,15 @@ export async function adminLayersRoutes(
       },
     },
     handler: async (request, reply) => {
-      const { rows: layerRows } = await options.db.query<LayerRow>(
-        `${LAYER_SELECT} WHERE l.id = $1`,
+      const { rows: collectionRows } = await options.db.query<CollectionRow>(
+        `${COLLECTION_SELECT} WHERE c.id = $1`,
         [request.params.id],
       )
-      if (layerRows.length === 0) {
+      if (collectionRows.length === 0) {
         reply.status(404)
-        return { statusCode: 404, error: 'Not Found', message: 'Layer not found' }
+        return { statusCode: 404, error: 'Not Found', message: 'Collection not found' }
       }
-      const layer = layerRows[0]
+      const collection = collectionRows[0]
       const { field, type } = request.query
 
       // Verify the field exists
@@ -461,7 +466,7 @@ export async function adminLayersRoutes(
       }>(
         `SELECT column_name, data_type FROM information_schema.columns
          WHERE table_name = $1 AND column_name = $2`,
-        [layer.table_name, field],
+        [collection.table_name, field],
       )
       if (colRows.length === 0) {
         reply.status(400)
@@ -470,7 +475,7 @@ export async function adminLayersRoutes(
 
       if (type === 'categorized') {
         const { rows } = await options.db.query<{ value: unknown }>(
-          `SELECT DISTINCT "${field}" AS value FROM ${layer.table_name}
+          `SELECT DISTINCT "${field}" AS value FROM ${collection.table_name}
            WHERE "${field}" IS NOT NULL ORDER BY "${field}" LIMIT 50`,
         )
         return {
@@ -495,7 +500,7 @@ export async function adminLayersRoutes(
 
       const { rows: statsRows } = await options.db.query<{ min: number; max: number }>(
         `SELECT MIN("${field}")::double precision AS min, MAX("${field}")::double precision AS max
-         FROM ${layer.table_name} WHERE "${field}" IS NOT NULL`,
+         FROM ${collection.table_name} WHERE "${field}" IS NOT NULL`,
       )
       const { min, max } = statsRows[0]
 
@@ -504,7 +509,7 @@ export async function adminLayersRoutes(
       const { rows: quantileRows } = await options.db.query<{ breakpoints: number[] }>(
         `SELECT percentile_cont(ARRAY[${fractions.join(',')}])
            WITHIN GROUP (ORDER BY "${field}"::double precision) AS breakpoints
-         FROM ${layer.table_name} WHERE "${field}" IS NOT NULL`,
+         FROM ${collection.table_name} WHERE "${field}" IS NOT NULL`,
       )
       const breakpoints = quantileRows[0].breakpoints
 
@@ -528,11 +533,11 @@ export async function adminLayersRoutes(
     },
   })
 
-  // GET /api/admin/layers/:id/history
-  app.get<{ Params: { id: string } }>('/api/admin/layers/:id/history', {
+  // GET /api/admin/collections/:id/history
+  app.get<{ Params: { id: string } }>('/api/admin/collections/:id/history', {
     schema: {
       tags: ['Admin'],
-      summary: 'Import history for a layer',
+      summary: 'Import history for a collection',
       params: {
         type: 'object',
         properties: { id: { type: 'string' } },
@@ -540,14 +545,14 @@ export async function adminLayersRoutes(
       },
     },
     handler: async (request, reply) => {
-      // Verify layer exists
-      const { rows: layerRows } = await options.db.query(
-        'SELECT id FROM sanson_layers WHERE id = $1',
+      // Verify collection exists
+      const { rows: collectionRows } = await options.db.query(
+        'SELECT id FROM sanson_collections WHERE id = $1',
         [request.params.id],
       )
-      if (layerRows.length === 0) {
+      if (collectionRows.length === 0) {
         reply.status(404)
-        return { statusCode: 404, error: 'Not Found', message: 'Layer not found' }
+        return { statusCode: 404, error: 'Not Found', message: 'Collection not found' }
       }
 
       const { rows } = await options.db.query(
@@ -555,7 +560,7 @@ export async function adminLayersRoutes(
                 total_features, imported_features, progress,
                 status, error, duration_ms, created_at, started_at, completed_at
          FROM sanson_import_history
-         WHERE layer_id = $1
+         WHERE collection_id = $1
          ORDER BY created_at DESC`,
         [request.params.id],
       )
@@ -563,11 +568,11 @@ export async function adminLayersRoutes(
     },
   })
 
-  // GET /api/admin/layers/:id/export
-  app.get<{ Params: { id: string } }>('/api/admin/layers/:id/export', {
+  // GET /api/admin/collections/:id/export
+  app.get<{ Params: { id: string } }>('/api/admin/collections/:id/export', {
     schema: {
       tags: ['Admin'],
-      summary: 'Export layer as GeoJSON file',
+      summary: 'Export collection as GeoJSON file',
       params: {
         type: 'object',
         properties: { id: { type: 'string' } },
@@ -575,30 +580,32 @@ export async function adminLayersRoutes(
       },
     },
     handler: async (request, reply) => {
-      const { rows: layerRows } = await options.db.query<LayerRow>(
-        `${LAYER_SELECT} WHERE l.id = $1`,
+      const { rows: collectionRows } = await options.db.query<CollectionRow>(
+        `${COLLECTION_SELECT} WHERE c.id = $1`,
         [request.params.id],
       )
-      if (layerRows.length === 0) {
+      if (collectionRows.length === 0) {
         reply.status(404)
-        return { statusCode: 404, error: 'Not Found', message: 'Layer not found' }
+        return { statusCode: 404, error: 'Not Found', message: 'Collection not found' }
       }
-      const layer = layerRows[0]
+      const collection = collectionRows[0]
 
       const geomExpr =
-        layer.srid === 4326 ? layer.geometry_column : `ST_Transform(${layer.geometry_column}, 4326)`
+        collection.srid === 4326
+          ? collection.geometry_column
+          : `ST_Transform(${collection.geometry_column}, 4326)`
 
-      const propsExpr = buildExportPropertiesExpr(layer)
+      const propsExpr = buildExportPropertiesExpr(collection)
       const { rows: features } = await options.db.query<{
         id: number
         geojson: object
         properties: Record<string, unknown>
       }>(
-        `SELECT ${layer.id_column} AS id,
+        `SELECT ${collection.id_column} AS id,
                 ST_AsGeoJSON(${geomExpr})::json AS geojson,
                 ${propsExpr} AS properties
-         FROM ${layer.table_name} t
-         ORDER BY ${layer.id_column}`,
+         FROM ${collection.table_name} t
+         ORDER BY ${collection.id_column}`,
       )
 
       const featureCollection = {
@@ -611,18 +618,18 @@ export async function adminLayersRoutes(
         })),
       }
 
-      const filename = `${layer.workspace_name}_${layer.name}.geojson`
+      const filename = `${collection.workspace_name}_${collection.name}.geojson`
       reply.header('Content-Type', 'application/geo+json')
       reply.header('Content-Disposition', `attachment; filename="${filename}"`)
       return featureCollection
     },
   })
 
-  // DELETE /api/admin/layers/:id
-  app.delete<{ Params: { id: string } }>('/api/admin/layers/:id', {
+  // DELETE /api/admin/collections/:id
+  app.delete<{ Params: { id: string } }>('/api/admin/collections/:id', {
     schema: {
       tags: ['Admin'],
-      summary: 'Delete a layer',
+      summary: 'Delete a collection',
       params: {
         type: 'object',
         properties: { id: { type: 'string' } },
@@ -630,20 +637,20 @@ export async function adminLayersRoutes(
       },
     },
     handler: async (request, reply) => {
-      // Fetch layer to get table_name before deleting
+      // Fetch collection to get table_name before deleting
       const { rows } = await options.db.query<{ table_name: string }>(
-        'SELECT table_name FROM sanson_layers WHERE id = $1',
+        'SELECT table_name FROM sanson_collections WHERE id = $1',
         [request.params.id],
       )
       if (rows.length === 0) {
         reply.status(404)
-        return { statusCode: 404, error: 'Not Found', message: 'Layer not found' }
+        return { statusCode: 404, error: 'Not Found', message: 'Collection not found' }
       }
 
       const tableName = rows[0].table_name
 
-      // Delete layer (cascades to import_history)
-      await options.db.query('DELETE FROM sanson_layers WHERE id = $1', [request.params.id])
+      // Delete collection (cascades to import_history)
+      await options.db.query('DELETE FROM sanson_collections WHERE id = $1', [request.params.id])
 
       // Drop the data table
       await options.db.query(`DROP TABLE IF EXISTS ${tableName}`)

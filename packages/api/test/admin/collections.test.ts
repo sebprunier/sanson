@@ -7,7 +7,7 @@ import { buildApp } from '../../src/app'
 
 const initSql = readFileSync(join(__dirname, '../../../../scripts/init.sql'), 'utf-8')
 
-describe('Admin layers API', () => {
+describe('Admin collections API', () => {
   let container: StartedPostgreSqlContainer
   let workspaceId: string
 
@@ -26,22 +26,22 @@ describe('Admin layers API', () => {
     await container.stop()
   })
 
-  it('GET /api/admin/layers — returns empty list initially', async () => {
+  it('GET /api/admin/collections — returns empty list initially', async () => {
     const db = new Pool({ connectionString: container.getConnectionUri() })
     const app = buildApp(db)
-    const response = await app.inject({ method: 'GET', url: '/api/admin/layers' })
+    const response = await app.inject({ method: 'GET', url: '/api/admin/collections' })
     await app.close()
 
     expect(response.statusCode).toBe(200)
     expect(response.json()).toEqual([])
   })
 
-  it('POST /api/admin/layers — creates a layer', async () => {
+  it('POST /api/admin/collections — creates a collection', async () => {
     const db = new Pool({ connectionString: container.getConnectionUri() })
     const app = buildApp(db)
     const response = await app.inject({
       method: 'POST',
-      url: '/api/admin/layers',
+      url: '/api/admin/collections',
       payload: {
         workspace_id: workspaceId,
         name: 'centrales',
@@ -62,12 +62,12 @@ describe('Admin layers API', () => {
     expect(body.id_column).toBe('id')
   })
 
-  it('POST /api/admin/layers — returns 409 on duplicate', async () => {
+  it('POST /api/admin/collections — returns 409 on duplicate', async () => {
     const db = new Pool({ connectionString: container.getConnectionUri() })
     const app = buildApp(db)
     const response = await app.inject({
       method: 'POST',
-      url: '/api/admin/layers',
+      url: '/api/admin/collections',
       payload: {
         workspace_id: workspaceId,
         name: 'centrales',
@@ -79,12 +79,12 @@ describe('Admin layers API', () => {
     expect(response.statusCode).toBe(409)
   })
 
-  it('POST /api/admin/layers — returns 400 for invalid workspace', async () => {
+  it('POST /api/admin/collections — returns 400 for invalid workspace', async () => {
     const db = new Pool({ connectionString: container.getConnectionUri() })
     const app = buildApp(db)
     const response = await app.inject({
       method: 'POST',
-      url: '/api/admin/layers',
+      url: '/api/admin/collections',
       payload: {
         workspace_id: '00000000-0000-0000-0000-999999999999',
         name: 'test',
@@ -96,10 +96,10 @@ describe('Admin layers API', () => {
     expect(response.statusCode).toBe(400)
   })
 
-  it('GET /api/admin/layers — lists layers', async () => {
+  it('GET /api/admin/collections — lists collections', async () => {
     const db = new Pool({ connectionString: container.getConnectionUri() })
     const app = buildApp(db)
-    const response = await app.inject({ method: 'GET', url: '/api/admin/layers' })
+    const response = await app.inject({ method: 'GET', url: '/api/admin/collections' })
     await app.close()
 
     const body = response.json()
@@ -107,32 +107,32 @@ describe('Admin layers API', () => {
     expect(body[0].name).toBe('centrales')
   })
 
-  it('GET /api/admin/layers?workspace_id= — filters by workspace', async () => {
+  it('GET /api/admin/collections?workspace_id= — filters by workspace', async () => {
     const db = new Pool({ connectionString: container.getConnectionUri() })
     const app = buildApp(db)
 
     const response = await app.inject({
       method: 'GET',
-      url: `/api/admin/layers?workspace_id=${workspaceId}`,
+      url: `/api/admin/collections?workspace_id=${workspaceId}`,
     })
     expect(response.json()).toHaveLength(1)
 
     const responseOther = await app.inject({
       method: 'GET',
-      url: '/api/admin/layers?workspace_id=00000000-0000-0000-0000-999999999999',
+      url: '/api/admin/collections?workspace_id=00000000-0000-0000-0000-999999999999',
     })
     expect(responseOther.json()).toHaveLength(0)
 
     await app.close()
   })
 
-  it('GET /api/admin/layers/:id — returns layer details', async () => {
+  it('GET /api/admin/collections/:id — returns collection details', async () => {
     const db = new Pool({ connectionString: container.getConnectionUri() })
-    const { rows } = await db.query("SELECT id FROM sanson_layers WHERE name = 'centrales'")
+    const { rows } = await db.query("SELECT id FROM sanson_collections WHERE name = 'centrales'")
     const app = buildApp(db)
     const response = await app.inject({
       method: 'GET',
-      url: `/api/admin/layers/${rows[0].id}`,
+      url: `/api/admin/collections/${rows[0].id}`,
     })
     await app.close()
 
@@ -141,13 +141,13 @@ describe('Admin layers API', () => {
     expect(response.json().workspace_name).toBe('energie')
   })
 
-  it('PUT /api/admin/layers/:id — updates a layer', async () => {
+  it('PUT /api/admin/collections/:id — updates a collection', async () => {
     const db = new Pool({ connectionString: container.getConnectionUri() })
-    const { rows } = await db.query("SELECT id FROM sanson_layers WHERE name = 'centrales'")
+    const { rows } = await db.query("SELECT id FROM sanson_collections WHERE name = 'centrales'")
     const app = buildApp(db)
     const response = await app.inject({
       method: 'PUT',
-      url: `/api/admin/layers/${rows[0].id}`,
+      url: `/api/admin/collections/${rows[0].id}`,
       payload: { description: 'Updated description', srid: 2154 },
     })
     await app.close()
@@ -158,9 +158,9 @@ describe('Admin layers API', () => {
     expect(response.json().name).toBe('centrales')
   })
 
-  it('PUT /api/admin/layers/:id — saves and returns style', async () => {
+  it('PUT /api/admin/collections/:id — saves and returns style', async () => {
     const db = new Pool({ connectionString: container.getConnectionUri() })
-    const { rows } = await db.query("SELECT id FROM sanson_layers WHERE name = 'centrales'")
+    const { rows } = await db.query("SELECT id FROM sanson_collections WHERE name = 'centrales'")
     const app = buildApp(db)
 
     const style = {
@@ -171,7 +171,7 @@ describe('Admin layers API', () => {
 
     const response = await app.inject({
       method: 'PUT',
-      url: `/api/admin/layers/${rows[0].id}`,
+      url: `/api/admin/collections/${rows[0].id}`,
       payload: { style },
     })
     expect(response.statusCode).toBe(200)
@@ -180,21 +180,21 @@ describe('Admin layers API', () => {
     // Verify it persists on GET
     const getRes = await app.inject({
       method: 'GET',
-      url: `/api/admin/layers/${rows[0].id}`,
+      url: `/api/admin/collections/${rows[0].id}`,
     })
     expect(getRes.json().style).toEqual(style)
 
     await app.close()
   })
 
-  it('PUT /api/admin/layers/:id — clears style with null', async () => {
+  it('PUT /api/admin/collections/:id — clears style with null', async () => {
     const db = new Pool({ connectionString: container.getConnectionUri() })
-    const { rows } = await db.query("SELECT id FROM sanson_layers WHERE name = 'centrales'")
+    const { rows } = await db.query("SELECT id FROM sanson_collections WHERE name = 'centrales'")
     const app = buildApp(db)
 
     const response = await app.inject({
       method: 'PUT',
-      url: `/api/admin/layers/${rows[0].id}`,
+      url: `/api/admin/collections/${rows[0].id}`,
       payload: { style: null },
     })
     expect(response.statusCode).toBe(200)
@@ -204,7 +204,7 @@ describe('Admin layers API', () => {
   })
 
   describe('classify endpoint', () => {
-    let layerId: string
+    let collectionId: string
 
     beforeAll(async () => {
       const db = new Pool({ connectionString: container.getConnectionUri() })
@@ -226,22 +226,22 @@ describe('Admin layers API', () => {
           (ST_SetSRID(ST_MakePoint(1.44, 43.60), 4326), 'Toulouse', 493465, 'major'),
           (ST_SetSRID(ST_MakePoint(-1.55, 47.22), 4326), 'Nantes', 314138, 'medium')
       `)
-      // Register as a layer
+      // Register as a collection
       const { rows } = await db.query(
-        `INSERT INTO sanson_layers (workspace_id, name, table_name, geometry_column, id_column, srid)
+        `INSERT INTO sanson_collections (workspace_id, name, table_name, geometry_column, id_column, srid)
          VALUES ($1, 'cities', 'energie_cities', 'geom', 'id', 4326) RETURNING id`,
         [workspaceId],
       )
-      layerId = rows[0].id
+      collectionId = rows[0].id
       await db.end()
     })
 
-    it('GET /api/admin/layers/:id/classify — categorized', async () => {
+    it('GET /api/admin/collections/:id/classify — categorized', async () => {
       const db = new Pool({ connectionString: container.getConnectionUri() })
       const app = buildApp(db)
       const response = await app.inject({
         method: 'GET',
-        url: `/api/admin/layers/${layerId}/classify?field=category&type=categorized`,
+        url: `/api/admin/collections/${collectionId}/classify?field=category&type=categorized`,
       })
       await app.close()
 
@@ -257,12 +257,12 @@ describe('Admin layers API', () => {
       ])
     })
 
-    it('GET /api/admin/layers/:id/classify — graduated (quantile)', async () => {
+    it('GET /api/admin/collections/:id/classify — graduated (quantile)', async () => {
       const db = new Pool({ connectionString: container.getConnectionUri() })
       const app = buildApp(db)
       const response = await app.inject({
         method: 'GET',
-        url: `/api/admin/layers/${layerId}/classify?field=population&type=graduated&classes=3`,
+        url: `/api/admin/collections/${collectionId}/classify?field=population&type=graduated&classes=3`,
       })
       await app.close()
 
@@ -276,12 +276,12 @@ describe('Admin layers API', () => {
       expect(body.classes[2].max).toBeDefined()
     })
 
-    it('GET /api/admin/layers/:id/classify — rejects non-numeric for graduated', async () => {
+    it('GET /api/admin/collections/:id/classify — rejects non-numeric for graduated', async () => {
       const db = new Pool({ connectionString: container.getConnectionUri() })
       const app = buildApp(db)
       const response = await app.inject({
         method: 'GET',
-        url: `/api/admin/layers/${layerId}/classify?field=name&type=graduated`,
+        url: `/api/admin/collections/${collectionId}/classify?field=name&type=graduated`,
       })
       await app.close()
 
@@ -289,12 +289,12 @@ describe('Admin layers API', () => {
       expect(response.json().message).toContain('not numeric')
     })
 
-    it('GET /api/admin/layers/:id/classify — rejects unknown field', async () => {
+    it('GET /api/admin/collections/:id/classify — rejects unknown field', async () => {
       const db = new Pool({ connectionString: container.getConnectionUri() })
       const app = buildApp(db)
       const response = await app.inject({
         method: 'GET',
-        url: `/api/admin/layers/${layerId}/classify?field=nonexistent&type=categorized`,
+        url: `/api/admin/collections/${collectionId}/classify?field=nonexistent&type=categorized`,
       })
       await app.close()
 
@@ -303,21 +303,21 @@ describe('Admin layers API', () => {
     })
   })
 
-  it('DELETE /api/admin/layers/:id — deletes a layer', async () => {
+  it('DELETE /api/admin/collections/:id — deletes a collection', async () => {
     const db = new Pool({ connectionString: container.getConnectionUri() })
-    const { rows } = await db.query("SELECT id FROM sanson_layers WHERE name = 'centrales'")
-    const layerId = rows[0].id
+    const { rows } = await db.query("SELECT id FROM sanson_collections WHERE name = 'centrales'")
+    const collectionId = rows[0].id
     const app = buildApp(db)
 
     const deleteRes = await app.inject({
       method: 'DELETE',
-      url: `/api/admin/layers/${layerId}`,
+      url: `/api/admin/collections/${collectionId}`,
     })
     expect(deleteRes.statusCode).toBe(204)
 
     const getRes = await app.inject({
       method: 'GET',
-      url: `/api/admin/layers/${layerId}`,
+      url: `/api/admin/collections/${collectionId}`,
     })
     expect(getRes.statusCode).toBe(404)
 

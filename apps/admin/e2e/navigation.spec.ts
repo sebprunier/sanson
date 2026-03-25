@@ -13,9 +13,9 @@ test.describe('Navigation', () => {
     await sidebar.getByRole('link', { name: 'Workspaces' }).click()
     await expect(page.getByRole('heading', { name: 'Workspaces' })).toBeVisible()
 
-    // Navigate to Layers
-    await sidebar.getByRole('link', { name: 'Layers' }).click()
-    await expect(page.getByRole('heading', { name: 'Layers' })).toBeVisible()
+    // Navigate to Collections
+    await sidebar.getByRole('link', { name: 'Collections' }).click()
+    await expect(page.getByRole('heading', { name: 'Collections' })).toBeVisible()
 
     // Navigate to Import
     await sidebar.getByRole('link', { name: 'Import' }).click()

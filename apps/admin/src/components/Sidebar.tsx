@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom'
 const links = [
   { to: '/', label: 'Dashboard', icon: DashboardIcon },
   { to: '/workspaces', label: 'Workspaces', icon: WorkspacesIcon },
-  { to: '/layers', label: 'Layers', icon: LayersIcon },
+  { to: '/collections', label: 'Collections', icon: CollectionsIcon },
   { to: '/import', label: 'Import', icon: ImportIcon },
   { to: '/api-explorer', label: 'API Explorer', icon: ApiIcon },
 ]
@@ -77,7 +77,7 @@ function WorkspacesIcon() {
   )
 }
 
-function LayersIcon() {
+function CollectionsIcon() {
   return (
     <svg
       className="w-5 h-5"

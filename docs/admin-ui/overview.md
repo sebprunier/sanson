@@ -6,51 +6,51 @@ Sanson includes a web administration interface built with React, Tailwind CSS, a
 
 The dashboard provides an overview of your Sanson instance:
 
-- Total workspaces, layers, and features
+- Total workspaces, collections, and features
 - PostgreSQL / PostGIS connection status
 - Recent import jobs with their status
 
 ## Workspaces
 
-Manage workspaces to organize your layers by theme or project:
+Manage workspaces to organize your collections by theme or project:
 
 - Create, rename, and delete workspaces
-- View all layers in each workspace
+- View all collections in each workspace
 - A `default` workspace is always available
 
-## Layers
+## Collections
 
-Browse and manage your geographic layers:
+Browse and manage your geographic collections:
 
-- List all layers with feature count, geometry type, and bounding box
-- Click a layer to access its detail view
+- List all collections with feature count, geometry type, and bounding box
+- Click a collection to access its detail view
 
-### Layer detail
+### Collection detail
 
-The layer detail page has six tabs:
+The collection detail page has six tabs:
 
 **Map** — interactive map powered by MapLibre GL JS with vector tile rendering. Features:
 
-- Auto-zoom to layer extent (fitBounds) on load
-- **Fit bounds button** (top-left) to re-center the map on the layer extent
+- Auto-zoom to collection extent (fitBounds) on load
+- **Fit bounds button** (top-left) to re-center the map on the collection extent
 - **Basemap switcher** (top-left) with three options: OSM (default), Light (CartoDB grayscale), Satellite (Esri World Imagery)
 - Feature inspection on click (popup with all properties)
 - Legend overlay when a style is configured
 
 **Table** — tabular display of features with column sorting. Features are loaded with pagination.
 
-**Schema** — lists all columns in the layer's data table with their PostgreSQL types and basic statistics (distinct values, null count).
+**Schema** — lists all columns in the collection's data table with their PostgreSQL types and basic statistics (distinct values, null count).
 
-**History** — import history for the layer, showing date, source file, status, progress, feature count, and duration.
+**History** — import history for the collection, showing date, source file, status, progress, feature count, and duration.
 
-**Settings** — configure the layer's metadata and API behavior:
+**Settings** — configure the collection's metadata and API behavior:
 
-- **Workspace** — move the layer to a different workspace
+- **Workspace** — move the collection to a different workspace
 - **Description** and **Attribution** — free-text metadata
 - **Datetime column** — select which column to use for OGC `?datetime=` temporal filtering
 - **Exposed fields** — choose which columns are visible in the OGC API, with optional aliases. See [Exposed Fields](/api/admin-endpoints#exposed-fields).
 
-**Style** — configure how the layer is rendered on the map:
+**Style** — configure how the collection is rendered on the map:
 
 - **Single** — one color for all features, with color picker and opacity slider
 - **Categorized** — map unique values of a column to colors (auto-classify from data)
@@ -61,20 +61,20 @@ The layer detail page has six tabs:
 - Fill opacity slider
 - Live map preview alongside the editor
 
-A **Export GeoJSON** button in the layer header exports the full dataset as a GeoJSON file.
+A **Export GeoJSON** button in the collection header exports the full dataset as a GeoJSON file.
 
 ## Data Import
 
 The import page handles file uploads and shows real-time progress:
 
 1. Select a **GeoJSON, CSV, or Shapefile (.zip)** file
-2. Choose the workspace and set the layer name
+2. Choose the workspace and set the collection name
 3. Optionally configure SRID and format-specific options (CSV separator, geo columns)
 4. Click Import — the file is uploaded and a background job is queued
 5. The progress view shows status, progress bar, feature count, and live logs
-6. On success, click **View layer** to explore the imported data
+6. On success, click **View collection** to explore the imported data
 
-The bottom of the page shows the full import history across all layers, filterable by status.
+The bottom of the page shows the full import history across all collections, filterable by status.
 
 ## API Explorer
 

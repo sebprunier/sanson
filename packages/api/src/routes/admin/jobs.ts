@@ -11,7 +11,7 @@ export async function adminJobsRoutes(
 ): Promise<void> {
   // GET /api/admin/jobs
   app.get<{
-    Querystring: { status?: string; layer_id?: string; limit?: string; offset?: string }
+    Querystring: { status?: string; collection_id?: string; limit?: string; offset?: string }
   }>('/api/admin/jobs', {
     schema: {
       tags: ['Admin'],
@@ -20,7 +20,7 @@ export async function adminJobsRoutes(
         type: 'object',
         properties: {
           status: { type: 'string', enum: ['pending', 'running', 'completed', 'failed'] },
-          layer_id: { type: 'string' },
+          collection_id: { type: 'string' },
           limit: { type: 'string' },
           offset: { type: 'string' },
         },
@@ -38,21 +38,21 @@ export async function adminJobsRoutes(
         conditions.push(`h.status = $${idx++}`)
         values.push(request.query.status)
       }
-      if (request.query.layer_id) {
-        conditions.push(`h.layer_id = $${idx++}`)
-        values.push(request.query.layer_id)
+      if (request.query.collection_id) {
+        conditions.push(`h.collection_id = $${idx++}`)
+        values.push(request.query.collection_id)
       }
 
       const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
 
       const { rows } = await options.db.query(
-        `SELECT h.id, h.job_id, h.layer_id, l.name AS layer_name,
+        `SELECT h.id, h.job_id, h.collection_id, c.name AS collection_name,
                 h.source_file, h.source_srid, h.target_srid,
                 h.feature_count, h.total_features, h.imported_features,
                 h.progress, h.status, h.error, h.logs,
                 h.duration_ms, h.created_at, h.started_at, h.completed_at
          FROM sanson_import_history h
-         LEFT JOIN sanson_layers l ON l.id = h.layer_id
+         LEFT JOIN sanson_collections c ON c.id = h.collection_id
          ${where}
          ORDER BY h.created_at DESC
          LIMIT $${idx++} OFFSET $${idx++}`,
@@ -76,13 +76,13 @@ export async function adminJobsRoutes(
     },
     handler: async (request, reply) => {
       const { rows } = await options.db.query(
-        `SELECT h.id, h.job_id, h.layer_id, l.name AS layer_name,
+        `SELECT h.id, h.job_id, h.collection_id, c.name AS collection_name,
                 h.source_file, h.source_srid, h.target_srid,
                 h.feature_count, h.total_features, h.imported_features,
                 h.progress, h.status, h.error, h.logs,
                 h.duration_ms, h.created_at, h.started_at, h.completed_at
          FROM sanson_import_history h
-         LEFT JOIN sanson_layers l ON l.id = h.layer_id
+         LEFT JOIN sanson_collections c ON c.id = h.collection_id
          WHERE h.id = $1`,
         [request.params.id],
       )

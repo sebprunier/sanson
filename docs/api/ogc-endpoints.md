@@ -69,7 +69,7 @@ Returns the auto-generated OpenAPI 3.0 specification. The admin UI includes an i
 GET /collections
 ```
 
-Lists all available feature collections (layers) across all workspaces.
+Lists all available feature collections across all workspaces.
 
 ```
 GET /collections/{collectionId}
@@ -77,7 +77,7 @@ GET /collections/{collectionId}
 
 Returns metadata for a single collection.
 
-**Collection ID format:** `{workspaceName}:{layerName}` (e.g., `default:regions`).
+**Collection ID format:** `{workspaceName}:{collectionName}` (e.g., `default:regions`).
 
 ::: tip
 The `:` separator follows the same convention used by GeoServer. If your proxy or WAF has issues with `:` in URLs, clients can encode it as `%3A`.
@@ -203,7 +203,7 @@ GET /collections/{collectionId}/queryables
 Returns a JSON Schema describing the filterable properties of the collection. This enables GIS clients like QGIS to dynamically build filter UIs without prior knowledge of the data schema.
 
 ::: tip
-If [exposed fields](/api/admin-endpoints#exposed-fields) are configured on the layer, only those columns appear in queryables, features, and vector tiles. Aliases are reflected in property names.
+If [exposed fields](/api/admin-endpoints#exposed-fields) are configured on the collection, only those columns appear in queryables, features, and vector tiles. Aliases are reflected in property names.
 :::
 
 ```json
@@ -226,7 +226,7 @@ If [exposed fields](/api/admin-endpoints#exposed-fields) are configured on the l
 GET /collections/{collectionId}/style
 ```
 
-Returns the style configuration for a collection (see [Layer Style](/api/admin-endpoints#layer-style) for the format). Returns `204 No Content` if no style is configured. External clients can use this endpoint to apply consistent styling.
+Returns the style configuration for a collection (see [Collection Style](/api/admin-endpoints#collection-style) for the format). Returns `204 No Content` if no style is configured. External clients can use this endpoint to apply consistent styling.
 
 ## Health check
 

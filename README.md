@@ -30,12 +30,12 @@ Sanson exposes geographic data stored in PostgreSQL/PostGIS via clean, modern RE
 - **Async data import** — background import via pg-boss with progress tracking, batch inserts, and import history. Supports GeoJSON (`.geojson`, `.json`, `.geojson.gz`, `.gz`), CSV (`.csv` with auto-detection of separator and geo columns), and Shapefile (`.zip` via `ogr2ogr` with SRID auto-detection and reprojection)
 - **Queryables** — discover filterable properties for each collection
 - **OGC pagination** — `self`, `next`, `prev`, `first`, `last` links in body and HTTP `Link` header + `X-Total-Count`
-- **Web admin UI** — dashboard, workspace and layer management, data import, interactive map and table views with CQL2 filter
-- **Layer settings** — configure description, attribution, datetime column, exposed fields (column visibility + aliasing), and style directly from the admin UI
-- **Layer style & legend** — single color, categorized (unique values), or graduated (numeric ranges) styling with auto-classification, color palettes, and live map legend
-- **GeoJSON export** — download any layer as a GeoJSON file, respecting exposed fields configuration
+- **Web admin UI** — dashboard, workspace and collection management, data import, interactive map and table views with CQL2 filter
+- **Collection settings** — configure description, attribution, datetime column, exposed fields (column visibility + aliasing), and style directly from the admin UI
+- **Collection style & legend** — single color, categorized (unique values), or graduated (numeric ranges) styling with auto-classification, color palettes, and live map legend
+- **GeoJSON export** — download any collection as a GeoJSON file, respecting exposed fields configuration
 - **API Explorer** — interactive API documentation powered by [Scalar](https://scalar.com), built into the admin UI
-- **Workspaces** — organize layers by theme or project
+- **Workspaces** — organize collections by theme or project
 - **Vector tiles (MVT)** — Mapbox Vector Tiles via `ST_AsMVT` at `/collections/{id}/tiles/{z}/{x}/{y}.pbf`
 - **OpenAPI documentation** — auto-generated from route schemas
 
@@ -110,8 +110,8 @@ GET /health                                  Database connectivity check
 POST /api/admin/import                       Import a data file (GeoJSON, CSV, Shapefile — async, returns 202)
 GET  /api/admin/jobs                         List import jobs (status, progress, history)
 GET  /api/admin/jobs/:id                     Get a specific job status
-GET  /api/admin/layers/:id/export            Export layer as GeoJSON
-GET  /api/admin/layers/:id/classify          Auto-classify a column for styling
+GET  /api/admin/collections/:id/export            Export collection as GeoJSON
+GET  /api/admin/collections/:id/classify          Auto-classify a column for styling
 ```
 
 ---

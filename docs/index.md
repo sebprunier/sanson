@@ -26,7 +26,7 @@ features:
   - title: Vector Tiles (MVT)
     details: Mapbox Vector Tiles via PostGIS ST_AsMVT. Compatible with MapLibre GL JS, Leaflet, and QGIS.
   - title: Web Admin UI
-    details: Dashboard, workspace and layer management, interactive map and table views, data import with live progress, API explorer.
+    details: Dashboard, workspace and collection management, interactive map and table views, data import with live progress, API explorer.
   - title: PostgreSQL-native
     details: Zero extra infrastructure. PostgreSQL handles data, spatial queries, and the job queue (pg-boss). No Redis, no RabbitMQ.
 ---

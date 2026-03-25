@@ -92,5 +92,5 @@ const map = new maplibregl.Map({
 ```
 
 ::: tip
-The `source-layer` name matches the layer name in Sanson (e.g., `regions` for a layer named `regions`).
+The `source-layer` name matches the collection name in Sanson (e.g., `regions` for a collection named `regions`).
 :::

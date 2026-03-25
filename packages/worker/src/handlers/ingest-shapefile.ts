@@ -90,7 +90,7 @@ async function listZipLayers(vsiPath: string): Promise<string[]> {
 }
 
 export async function handleShapefileIngest(db: Pool, payload: IngestJobPayload): Promise<void> {
-  const { importHistoryId, filePath, workspaceId, layerName, srid, sourceFileName } = payload
+  const { importHistoryId, filePath, workspaceId, collectionName, srid, sourceFileName } = payload
 
   await updateProgress(db, importHistoryId, {
     status: 'running',
@@ -142,7 +142,7 @@ export async function handleShapefileIngest(db: Pool, payload: IngestJobPayload)
   }
 
   // Phase B: Prepare table name
-  const tableName = `data_${sanitizeTableName(layerName)}`
+  const tableName = `data_${sanitizeTableName(collectionName)}`
 
   // Drop existing table (re-import safety)
   const { rows: tableCheck } = await db.query(
@@ -243,31 +243,31 @@ export async function handleShapefileIngest(db: Pool, payload: IngestJobPayload)
     }
   }
 
-  // Register or update layer
+  // Register or update collection
   // Use geometryType from ogrinfo (mixed case e.g. "MultiPolygon") rather than
   // PostGIS GeometryType() which returns uppercase ("MULTIPOLYGON")
-  const { rows: existingLayer } = await db.query(
-    'SELECT id FROM sanson_layers WHERE workspace_id = $1 AND name = $2',
-    [workspaceId, layerName],
+  const { rows: existingCollection } = await db.query(
+    'SELECT id FROM sanson_collections WHERE workspace_id = $1 AND name = $2',
+    [workspaceId, collectionName],
   )
 
-  let layerId: string
-  if (existingLayer.length > 0) {
-    layerId = existingLayer[0].id
+  let collectionId: string
+  if (existingCollection.length > 0) {
+    collectionId = existingCollection[0].id
     await db.query(
-      `UPDATE sanson_layers
+      `UPDATE sanson_collections
        SET bbox = $2, feature_count = $3, geometry_type = $4, updated_at = now()
        WHERE id = $1`,
-      [layerId, JSON.stringify(bbox), featureCount, geometryType],
+      [collectionId, JSON.stringify(bbox), featureCount, geometryType],
     )
   } else {
-    const { rows: newLayer } = await db.query(
-      `INSERT INTO sanson_layers (workspace_id, name, table_name, geometry_column, id_column, srid, bbox, feature_count, geometry_type)
+    const { rows: newCollection } = await db.query(
+      `INSERT INTO sanson_collections (workspace_id, name, table_name, geometry_column, id_column, srid, bbox, feature_count, geometry_type)
        VALUES ($1, $2, $3, 'geom', 'id', $4, $5, $6, $7)
        RETURNING id`,
       [
         workspaceId,
-        layerName,
+        collectionName,
         tableName,
         targetSrid,
         JSON.stringify(bbox),
@@ -275,13 +275,13 @@ export async function handleShapefileIngest(db: Pool, payload: IngestJobPayload)
         geometryType,
       ],
     )
-    layerId = newLayer[0].id
+    collectionId = newCollection[0].id
   }
 
-  // Link layer to import history
-  await db.query('UPDATE sanson_import_history SET layer_id = $2 WHERE id = $1', [
+  // Link collection to import history
+  await db.query('UPDATE sanson_import_history SET collection_id = $2 WHERE id = $1', [
     importHistoryId,
-    layerId,
+    collectionId,
   ])
 
   // Compute duration

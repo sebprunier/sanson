@@ -8,7 +8,7 @@ export function Import() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [workspaceId, setWorkspaceId] = useState('')
-  const [layerName, setLayerName] = useState('')
+  const [collectionName, setCollectionName] = useState('')
   const [srid, setSrid] = useState('4326')
   const [file, setFile] = useState<File | null>(null)
   const [isCsv, setIsCsv] = useState(false)
@@ -100,8 +100,8 @@ export function Import() {
     const shp = f.name.toLowerCase().endsWith('.zip')
     setIsCsv(csv)
     setIsShapefile(shp)
-    if (!layerName) {
-      setLayerName(
+    if (!collectionName) {
+      setCollectionName(
         f.name
           .replace(/\.geojson\.gz$/, '')
           .replace(/\.[^.]+$/, '')
@@ -113,7 +113,7 @@ export function Import() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!file || !workspaceId || !layerName) return
+    if (!file || !workspaceId || !collectionName) return
 
     setImporting(true)
     setError('')
@@ -123,7 +123,7 @@ export function Import() {
     try {
       const res = await api.import({
         workspace_id: workspaceId,
-        layer_name: layerName,
+        collection_name: collectionName,
         file,
         srid: parseInt(srid) || undefined,
         separator: isCsv && separator ? separator : undefined,
@@ -147,7 +147,7 @@ export function Import() {
     setSeparator('')
     setLongitudeCol('')
     setLatitudeCol('')
-    setLayerName('')
+    setCollectionName('')
     setError('')
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
@@ -223,7 +223,9 @@ export function Import() {
               {currentJob.duration_ms != null && (
                 <Row label="Duration" value={`${(currentJob.duration_ms / 1000).toFixed(1)}s`} />
               )}
-              {currentJob.layer_name && <Row label="Layer" value={currentJob.layer_name} />}
+              {currentJob.collection_name && (
+                <Row label="Layer" value={currentJob.collection_name} />
+              )}
             </dl>
           )}
 
@@ -246,12 +248,12 @@ export function Import() {
 
           {(currentJob?.status === 'completed' || currentJob?.status === 'failed') && (
             <div className="flex gap-3 mt-6">
-              {currentJob.status === 'completed' && currentJob.layer_id && (
+              {currentJob.status === 'completed' && currentJob.collection_id && (
                 <button
-                  onClick={() => navigate(`/layers/${currentJob.layer_id}`)}
+                  onClick={() => navigate(`/collections/${currentJob.collection_id}`)}
                   className="bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-800"
                 >
-                  View layer
+                  View collection
                 </button>
               )}
               <button
@@ -301,11 +303,11 @@ export function Import() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Layer name</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Collection name</label>
             <input
               type="text"
-              value={layerName}
-              onChange={(e) => setLayerName(e.target.value)}
+              value={collectionName}
+              onChange={(e) => setCollectionName(e.target.value)}
               required
               placeholder="e.g. nuclear_plants"
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
@@ -423,7 +425,7 @@ export function Import() {
               <tr className="border-b border-gray-200">
                 <th className="text-left px-3 py-2 font-medium text-gray-600">Date</th>
                 <th className="text-left px-3 py-2 font-medium text-gray-600">Source</th>
-                <th className="text-left px-3 py-2 font-medium text-gray-600">Layer</th>
+                <th className="text-left px-3 py-2 font-medium text-gray-600">Collection</th>
                 <th className="text-left px-3 py-2 font-medium text-gray-600">Progress</th>
                 <th className="text-left px-3 py-2 font-medium text-gray-600">Features</th>
                 <th className="text-left px-3 py-2 font-medium text-gray-600">Duration</th>
@@ -435,15 +437,15 @@ export function Import() {
                 <tr
                   key={j.id}
                   className={`border-b border-gray-100 last:border-0 ${
-                    j.layer_id ? 'hover:bg-gray-50 cursor-pointer' : ''
+                    j.collection_id ? 'hover:bg-gray-50 cursor-pointer' : ''
                   }`}
-                  onClick={() => j.layer_id && navigate(`/layers/${j.layer_id}`)}
+                  onClick={() => j.collection_id && navigate(`/collections/${j.collection_id}`)}
                 >
                   <td className="px-3 py-2 text-gray-700 whitespace-nowrap">
                     {new Date(j.created_at).toLocaleString()}
                   </td>
                   <td className="px-3 py-2 text-gray-700">{j.source_file}</td>
-                  <td className="px-3 py-2 text-gray-700">{j.layer_name ?? '—'}</td>
+                  <td className="px-3 py-2 text-gray-700">{j.collection_name ?? '—'}</td>
                   <td className="px-3 py-2 w-32">
                     {j.status === 'running' || j.status === 'pending' ? (
                       <div className="w-full bg-gray-200 rounded-full h-1.5">

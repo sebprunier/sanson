@@ -16,8 +16,8 @@ test.describe('Dashboard', () => {
     await expect(main.locator('p.text-2xl')).toHaveCount(3)
   })
 
-  test('shows recent layers table', async ({ page }) => {
+  test('shows recent collections table', async ({ page }) => {
     await page.goto('/')
-    await expect(page.getByRole('heading', { name: 'Recent layers' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Recent collections' })).toBeVisible()
   })
 })

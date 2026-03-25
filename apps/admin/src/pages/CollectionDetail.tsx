@@ -4,7 +4,7 @@ import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { api } from '../services/api'
 import type {
-  Layer,
+  Collection,
   Workspace,
   ColumnSchema,
   ImportHistory,
@@ -34,25 +34,25 @@ interface ItemsResponse {
 
 type Tab = 'map' | 'table' | 'schema' | 'history' | 'settings' | 'style'
 
-export function LayerDetail() {
+export function CollectionDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const [layer, setLayer] = useState<Layer | null>(null)
+  const [collection, setCollection] = useState<Collection | null>(null)
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<Tab>('map')
 
   useEffect(() => {
     if (!id) return
-    api.layers
+    api.collections
       .get(id)
-      .then(setLayer)
+      .then(setCollection)
       .finally(() => setLoading(false))
   }, [id])
 
   if (loading) return <div className="animate-pulse h-8 w-40 bg-gray-200 rounded" />
-  if (!layer) return <p className="text-gray-500">Layer not found.</p>
+  if (!collection) return <p className="text-gray-500">Collection not found.</p>
 
-  const collectionId = `${layer.workspace_name}:${layer.name}`
+  const collectionId = `${collection.workspace_name}:${collection.name}`
 
   return (
     <div>
@@ -65,14 +65,15 @@ export function LayerDetail() {
 
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{layer.name}</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{collection.name}</h1>
           <p className="text-sm text-gray-500">
-            {layer.workspace_name} &middot; {layer.geometry_type ?? 'Unknown'} &middot;{' '}
-            {layer.feature_count?.toLocaleString() ?? 0} features &middot; SRID {layer.srid}
+            {collection.workspace_name} &middot; {collection.geometry_type ?? 'Unknown'} &middot;{' '}
+            {collection.feature_count?.toLocaleString() ?? 0} features &middot; SRID{' '}
+            {collection.srid}
           </p>
         </div>
         <a
-          href={api.layers.exportUrl(layer.id)}
+          href={api.collections.exportUrl(collection.id)}
           download
           className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary-700 border border-primary-300 rounded-lg hover:bg-primary-50 transition-colors"
         >
@@ -105,16 +106,16 @@ export function LayerDetail() {
       {tab === 'map' && (
         <MapView
           collectionId={collectionId}
-          bbox={layer.bbox}
-          geometryType={layer.geometry_type}
-          style={layer.style}
+          bbox={collection.bbox}
+          geometryType={collection.geometry_type}
+          style={collection.style}
         />
       )}
       {tab === 'table' && <TableView collectionId={collectionId} />}
-      {tab === 'schema' && <SchemaView layerId={layer.id} />}
-      {tab === 'history' && <HistoryView layerId={layer.id} />}
-      {tab === 'settings' && <SettingsView layer={layer} onUpdate={setLayer} />}
-      {tab === 'style' && <StyleView layer={layer} onUpdate={setLayer} />}
+      {tab === 'schema' && <SchemaView collectionId={collection.id} />}
+      {tab === 'history' && <HistoryView collectionId={collection.id} />}
+      {tab === 'settings' && <SettingsView collection={collection} onUpdate={setCollection} />}
+      {tab === 'style' && <StyleView collection={collection} onUpdate={setCollection} />}
     </div>
   )
 }
@@ -238,11 +239,11 @@ function MapView({
       fitToBbox(map, bbox)
 
       map.on('click', (e) => {
-        const layerIds = ['features-circle', 'features-fill', 'features-line'].filter((lid) =>
+        const collectionIds = ['features-circle', 'features-fill', 'features-line'].filter((lid) =>
           map.getLayer(lid),
         )
-        if (layerIds.length === 0) return
-        const features = map.queryRenderedFeatures(e.point, { layers: layerIds })
+        if (collectionIds.length === 0) return
+        const features = map.queryRenderedFeatures(e.point, { layers: collectionIds })
         if (features.length === 0) return
         const props = features[0].properties
         const html = Object.entries(props)
@@ -284,7 +285,7 @@ function MapView({
       <div ref={mapContainer} className="w-full h-[600px] rounded-lg border border-gray-200" />
       {/* Fit bounds button */}
       <button
-        title="Fit to layer extent"
+        title="Fit to collection extent"
         onClick={() => mapRef.current && fitToBbox(mapRef.current, bbox)}
         className="absolute top-2.5 left-2.5 bg-white rounded shadow p-1.5 hover:bg-gray-100 transition-colors border border-gray-300"
       >
@@ -570,20 +571,20 @@ function TableView({ collectionId }: { collectionId: string }) {
   )
 }
 
-function SchemaView({ layerId }: { layerId: string }) {
+function SchemaView({ collectionId }: { collectionId: string }) {
   const [columns, setColumns] = useState<ColumnSchema[]>([])
   const [totalCount, setTotalCount] = useState(0)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    api.layers
-      .schema(layerId)
+    api.collections
+      .schema(collectionId)
       .then((data) => {
         setColumns(data.columns)
         setTotalCount(data.total_count)
       })
       .finally(() => setLoading(false))
-  }, [layerId])
+  }, [collectionId])
 
   if (loading) return <div className="animate-pulse h-48 bg-gray-200 rounded-lg" />
 
@@ -640,13 +641,19 @@ interface FieldConfig {
   enabled: boolean
 }
 
-function SettingsView({ layer, onUpdate }: { layer: Layer; onUpdate: (l: Layer) => void }) {
+function SettingsView({
+  collection,
+  onUpdate,
+}: {
+  collection: Collection
+  onUpdate: (c: Collection) => void
+}) {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [columns, setColumns] = useState<ColumnSchema[]>([])
-  const [workspaceId, setWorkspaceId] = useState(layer.workspace_id)
-  const [description, setDescription] = useState(layer.description ?? '')
-  const [attribution, setAttribution] = useState(layer.attribution ?? '')
-  const [datetimeColumn, setDatetimeColumn] = useState(layer.datetime_column ?? '')
+  const [workspaceId, setWorkspaceId] = useState(collection.workspace_id)
+  const [description, setDescription] = useState(collection.description ?? '')
+  const [attribution, setAttribution] = useState(collection.attribution ?? '')
+  const [datetimeColumn, setDatetimeColumn] = useState(collection.datetime_column ?? '')
   const [fields, setFields] = useState<FieldConfig[]>([])
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -654,13 +661,13 @@ function SettingsView({ layer, onUpdate }: { layer: Layer; onUpdate: (l: Layer) 
 
   useEffect(() => {
     api.workspaces.list().then(setWorkspaces)
-    api.layers.schema(layer.id).then((data) => {
+    api.collections.schema(collection.id).then((data) => {
       setColumns(data.columns)
       // Build field config from schema + existing exposed_fields
       const dataCols = data.columns.filter(
-        (c) => c.column !== layer.geometry_column && c.column !== layer.id_column,
+        (c) => c.column !== collection.geometry_column && c.column !== collection.id_column,
       )
-      const exposed = layer.exposed_fields
+      const exposed = collection.exposed_fields
       if (exposed && exposed.length > 0) {
         const exposedMap = new Map(exposed.map((f) => [f.source, f.alias ?? f.source]))
         setFields(
@@ -674,7 +681,7 @@ function SettingsView({ layer, onUpdate }: { layer: Layer; onUpdate: (l: Layer) 
         setFields(dataCols.map((c) => ({ source: c.column, alias: c.column, enabled: true })))
       }
     })
-  }, [layer.id, layer.geometry_column, layer.id_column, layer.exposed_fields])
+  }, [collection.id, collection.geometry_column, collection.id_column, collection.exposed_fields])
 
   const dateColumns = columns.filter(
     (c) =>
@@ -703,8 +710,8 @@ function SettingsView({ layer, onUpdate }: { layer: Layer; onUpdate: (l: Layer) 
                 f.alias !== f.source ? { source: f.source, alias: f.alias } : { source: f.source },
               )
 
-      const updated = await api.layers.update(layer.id, {
-        workspace_id: workspaceId !== layer.workspace_id ? workspaceId : undefined,
+      const updated = await api.collections.update(collection.id, {
+        workspace_id: workspaceId !== collection.workspace_id ? workspaceId : undefined,
         description: description || null,
         attribution: attribution || null,
         datetime_column: datetimeColumn || null,
@@ -754,7 +761,7 @@ function SettingsView({ layer, onUpdate }: { layer: Layer; onUpdate: (l: Layer) 
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           rows={3}
-          placeholder="A short description of this layer"
+          placeholder="A short description of this collection"
           className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
         />
       </div>
@@ -785,7 +792,7 @@ function SettingsView({ layer, onUpdate }: { layer: Layer; onUpdate: (l: Layer) 
           ))}
         </select>
         <p className="text-xs text-gray-400 mt-1">
-          Enables the OGC <code>?datetime=</code> filter on this layer
+          Enables the OGC <code>?datetime=</code> filter on this collection
         </p>
       </div>
 
@@ -856,44 +863,50 @@ function SettingsView({ layer, onUpdate }: { layer: Layer; onUpdate: (l: Layer) 
   )
 }
 
-function StyleView({ layer, onUpdate }: { layer: Layer; onUpdate: (l: Layer) => void }) {
+function StyleView({
+  collection,
+  onUpdate,
+}: {
+  collection: Collection
+  onUpdate: (c: Collection) => void
+}) {
   const [columns, setColumns] = useState<ColumnSchema[]>([])
   const [styleType, setStyleType] = useState<'single' | 'categorized' | 'graduated'>(
-    layer.style?.type ?? 'single',
+    collection.style?.type ?? 'single',
   )
-  const [fillColor, setFillColor] = useState(layer.style?.fill_color ?? '#1B4F72')
-  const [fillOpacity, setFillOpacity] = useState(layer.style?.fill_opacity ?? 0.3)
-  const [strokeColor, setStrokeColor] = useState(layer.style?.stroke_color ?? '#333333')
-  const [strokeWidth, setStrokeWidth] = useState(layer.style?.stroke_width ?? 1.5)
-  const [showStroke, setShowStroke] = useState((layer.style?.stroke_width ?? 1.5) > 0)
-  const [field, setField] = useState(layer.style?.field ?? '')
-  const [categories, setCategories] = useState(layer.style?.categories ?? [])
+  const [fillColor, setFillColor] = useState(collection.style?.fill_color ?? '#1B4F72')
+  const [fillOpacity, setFillOpacity] = useState(collection.style?.fill_opacity ?? 0.3)
+  const [strokeColor, setStrokeColor] = useState(collection.style?.stroke_color ?? '#333333')
+  const [strokeWidth, setStrokeWidth] = useState(collection.style?.stroke_width ?? 1.5)
+  const [showStroke, setShowStroke] = useState((collection.style?.stroke_width ?? 1.5) > 0)
+  const [field, setField] = useState(collection.style?.field ?? '')
+  const [categories, setCategories] = useState(collection.style?.categories ?? [])
   const [method, setMethod] = useState<'equal_interval' | 'quantile'>(
-    (layer.style?.method as 'equal_interval' | 'quantile') ?? 'quantile',
+    (collection.style?.method as 'equal_interval' | 'quantile') ?? 'quantile',
   )
-  const [numClasses, setNumClasses] = useState(layer.style?.classes?.length ?? 5)
-  const [classes, setClasses] = useState(layer.style?.classes ?? [])
+  const [numClasses, setNumClasses] = useState(collection.style?.classes?.length ?? 5)
+  const [classes, setClasses] = useState(collection.style?.classes ?? [])
   const [palette, setPalette] = useState<PaletteName>('blues')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
   const [classifyLoading, setClassifyLoading] = useState(false)
 
-  const [hasStyle, setHasStyle] = useState(layer.style != null)
+  const [hasStyle, setHasStyle] = useState(collection.style != null)
 
   // Live preview style — null when no style is active
   const effectiveStrokeWidth = showStroke ? strokeWidth : 0
   const previewStyle = hasStyle ? buildPreviewStyle() : null
 
   useEffect(() => {
-    api.layers.schema(layer.id).then((data) => {
+    api.collections.schema(collection.id).then((data) => {
       setColumns(
         data.columns.filter(
-          (c) => c.column !== layer.geometry_column && c.column !== layer.id_column,
+          (c) => c.column !== collection.geometry_column && c.column !== collection.id_column,
         ),
       )
     })
-  }, [layer.id, layer.geometry_column, layer.id_column])
+  }, [collection.id, collection.geometry_column, collection.id_column])
 
   const numericColumns = columns.filter((c) =>
     ['integer', 'bigint', 'smallint', 'double precision', 'real', 'numeric'].includes(c.type),
@@ -938,7 +951,7 @@ function StyleView({ layer, onUpdate }: { layer: Layer; onUpdate: (l: Layer) => 
     setClassifyLoading(true)
     setError('')
     try {
-      const result: ClassifyResult = await api.layers.classify(layer.id, {
+      const result: ClassifyResult = await api.collections.classify(collection.id, {
         field,
         type: styleType,
         classes: numClasses,
@@ -991,7 +1004,7 @@ function StyleView({ layer, onUpdate }: { layer: Layer; onUpdate: (l: Layer) => 
     setSaved(false)
     try {
       const styleToSave = buildPreviewStyle()
-      const updated = await api.layers.update(layer.id, { style: styleToSave })
+      const updated = await api.collections.update(collection.id, { style: styleToSave })
       onUpdate(updated)
       setHasStyle(true)
       setSaved(true)
@@ -1007,7 +1020,7 @@ function StyleView({ layer, onUpdate }: { layer: Layer; onUpdate: (l: Layer) => 
     setSaving(true)
     setError('')
     try {
-      const updated = await api.layers.update(layer.id, { style: null })
+      const updated = await api.collections.update(collection.id, { style: null })
       onUpdate(updated)
       setHasStyle(false)
       setSaved(true)
@@ -1019,7 +1032,7 @@ function StyleView({ layer, onUpdate }: { layer: Layer; onUpdate: (l: Layer) => 
     }
   }
 
-  const collectionId = `${layer.workspace_name}:${layer.name}`
+  const collectionId = `${collection.workspace_name}:${collection.name}`
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -1349,8 +1362,8 @@ function StyleView({ layer, onUpdate }: { layer: Layer; onUpdate: (l: Layer) => 
       <div>
         <MapView
           collectionId={collectionId}
-          bbox={layer.bbox}
-          geometryType={layer.geometry_type}
+          bbox={collection.bbox}
+          geometryType={collection.geometry_type}
           style={previewStyle}
         />
       </div>
@@ -1376,7 +1389,7 @@ function DownloadIcon() {
   )
 }
 
-function HistoryView({ layerId }: { layerId: string }) {
+function HistoryView({ collectionId }: { collectionId: string }) {
   const [history, setHistory] = useState<ImportHistory[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -1384,7 +1397,7 @@ function HistoryView({ layerId }: { layerId: string }) {
     let cancelled = false
 
     const load = async () => {
-      const data = await api.layers.history(layerId)
+      const data = await api.collections.history(collectionId)
       if (cancelled) return
       setHistory(data)
       setLoading(false)
@@ -1399,12 +1412,12 @@ function HistoryView({ layerId }: { layerId: string }) {
     return () => {
       cancelled = true
     }
-  }, [layerId])
+  }, [collectionId])
 
   if (loading) return <div className="animate-pulse h-48 bg-gray-200 rounded-lg" />
 
   if (history.length === 0) {
-    return <p className="text-sm text-gray-500">No import history for this layer.</p>
+    return <p className="text-sm text-gray-500">No import history for this collection.</p>
   }
 
   return (

@@ -34,7 +34,7 @@ interface CollectionsResponse {
   collections: OgcCollection[]
 }
 
-interface LayerRow {
+interface CollectionRow {
   workspace_name: string
   name: string
   description: string | null
@@ -48,7 +48,7 @@ interface ExposedField {
   alias?: string
 }
 
-interface LayerConfig {
+interface CollectionConfig {
   workspace_name: string
   name: string
   table_name: string
@@ -119,10 +119,10 @@ const featureCollectionResponseSchema = {
 
 function parseCollectionId(
   collectionId: string,
-): { workspaceName: string; layerName: string } | null {
+): { workspaceName: string; collectionName: string } | null {
   const idx = collectionId.indexOf(':')
   if (idx === -1) return null
-  return { workspaceName: collectionId.slice(0, idx), layerName: collectionId.slice(idx + 1) }
+  return { workspaceName: collectionId.slice(0, idx), collectionName: collectionId.slice(idx + 1) }
 }
 
 function sendNotFound(reply: FastifyReply) {
@@ -130,7 +130,7 @@ function sendNotFound(reply: FastifyReply) {
   return { statusCode: 404, error: 'Not Found', message: 'Collection not found' }
 }
 
-function buildCollection(row: LayerRow): OgcCollection {
+function buildCollection(row: CollectionRow): OgcCollection {
   const collectionId = `${row.workspace_name}:${row.name}`
 
   const extent: OgcCollection['extent'] = {}
@@ -166,17 +166,17 @@ function buildCollection(row: LayerRow): OgcCollection {
   }
 }
 
-async function resolveLayer(
+async function resolveCollection(
   db: Pool,
   workspaceName: string,
-  layerName: string,
-): Promise<LayerConfig | null> {
-  const { rows } = await db.query<LayerConfig>(
-    `SELECT w.name AS workspace_name, l.name, l.table_name, l.geometry_column, l.id_column, l.datetime_column, l.exposed_fields, l.srid
-     FROM sanson_layers l
-     JOIN sanson_workspaces w ON w.id = l.workspace_id
-     WHERE w.name = $1 AND l.name = $2`,
-    [workspaceName, layerName],
+  collectionName: string,
+): Promise<CollectionConfig | null> {
+  const { rows } = await db.query<CollectionConfig>(
+    `SELECT w.name AS workspace_name, c.name, c.table_name, c.geometry_column, c.id_column, c.datetime_column, c.exposed_fields, c.srid
+     FROM sanson_collections c
+     JOIN sanson_workspaces w ON w.id = c.workspace_id
+     WHERE w.name = $1 AND c.name = $2`,
+    [workspaceName, collectionName],
   )
   return rows[0] ?? null
 }
@@ -192,33 +192,33 @@ function parseBbox(bbox: string): [number, number, number, number] | null {
  * When exposed_fields is null, returns all columns via to_jsonb minus id/geom.
  * When set, builds a jsonb_build_object with only the specified columns (with optional aliases).
  */
-function buildPropertiesExpr(layer: LayerConfig): string {
-  if (!layer.exposed_fields || layer.exposed_fields.length === 0) {
-    return `to_jsonb(t.*) - '${layer.id_column}' - '${layer.geometry_column}'`
+function buildPropertiesExpr(col: CollectionConfig): string {
+  if (!col.exposed_fields || col.exposed_fields.length === 0) {
+    return `to_jsonb(t.*) - '${col.id_column}' - '${col.geometry_column}'`
   }
-  const pairs = layer.exposed_fields
+  const pairs = col.exposed_fields
     .map((f) => `'${f.alias ?? f.source}', t."${f.source}"`)
     .join(', ')
   return `jsonb_build_object(${pairs})`
 }
 
 /**
- * Get the list of column names exposed by a layer.
+ * Get the list of column names exposed by a collection.
  * When exposed_fields is null, queries information_schema for all non-id/non-geom columns.
  * Returns [{source, alias}] entries.
  */
 async function getExposedColumns(
   db: Pool,
-  layer: LayerConfig,
+  col: CollectionConfig,
 ): Promise<{ source: string; alias: string; dataType: string }[]> {
-  if (layer.exposed_fields && layer.exposed_fields.length > 0) {
+  if (col.exposed_fields && col.exposed_fields.length > 0) {
     // Get data types for the exposed columns
     const { rows: allCols } = await db.query<{ column_name: string; data_type: string }>(
       `SELECT column_name, data_type FROM information_schema.columns WHERE table_name = $1`,
-      [layer.table_name],
+      [col.table_name],
     )
     const typeMap = new Map(allCols.map((c) => [c.column_name, c.data_type]))
-    return layer.exposed_fields.map((f) => ({
+    return col.exposed_fields.map((f) => ({
       source: f.source,
       alias: f.alias ?? f.source,
       dataType: typeMap.get(f.source) ?? 'text',
@@ -228,7 +228,7 @@ async function getExposedColumns(
     `SELECT column_name, data_type FROM information_schema.columns
      WHERE table_name = $1 AND column_name NOT IN ($2, $3)
      ORDER BY ordinal_position`,
-    [layer.table_name, layer.id_column, layer.geometry_column],
+    [col.table_name, col.id_column, col.geometry_column],
   )
   return rows.map((c) => ({ source: c.column_name, alias: c.column_name, dataType: c.data_type }))
 }
@@ -248,11 +248,11 @@ export async function collectionsRoutes(
       response: { 200: collectionsResponseSchema },
     },
     handler: async () => {
-      const { rows } = await options.db.query<LayerRow>(
-        `SELECT w.name AS workspace_name, l.name, l.description, l.bbox, l.temporal_extent, l.srid
-         FROM sanson_layers l
-         JOIN sanson_workspaces w ON w.id = l.workspace_id
-         ORDER BY w.name, l.name`,
+      const { rows } = await options.db.query<CollectionRow>(
+        `SELECT w.name AS workspace_name, c.name, c.description, c.bbox, c.temporal_extent, c.srid
+         FROM sanson_collections c
+         JOIN sanson_workspaces w ON w.id = c.workspace_id
+         ORDER BY w.name, c.name`,
       )
 
       return {
@@ -273,7 +273,7 @@ export async function collectionsRoutes(
         properties: {
           collectionId: {
             type: 'string',
-            description: 'Collection identifier (workspaceId:layerName)',
+            description: 'Collection identifier (workspaceName:collectionName)',
           },
         },
         required: ['collectionId'],
@@ -284,12 +284,12 @@ export async function collectionsRoutes(
       const parsed = parseCollectionId(request.params.collectionId)
       if (!parsed) return sendNotFound(reply)
 
-      const { rows } = await options.db.query<LayerRow>(
-        `SELECT w.name AS workspace_name, l.name, l.description, l.bbox, l.temporal_extent, l.srid
-           FROM sanson_layers l
-           JOIN sanson_workspaces w ON w.id = l.workspace_id
-           WHERE w.name = $1 AND l.name = $2`,
-        [parsed.workspaceName, parsed.layerName],
+      const { rows } = await options.db.query<CollectionRow>(
+        `SELECT w.name AS workspace_name, c.name, c.description, c.bbox, c.temporal_extent, c.srid
+           FROM sanson_collections c
+           JOIN sanson_workspaces w ON w.id = c.workspace_id
+           WHERE w.name = $1 AND c.name = $2`,
+        [parsed.workspaceName, parsed.collectionName],
       )
 
       if (rows.length === 0) return sendNotFound(reply)
@@ -323,7 +323,7 @@ export async function collectionsRoutes(
         properties: {
           collectionId: {
             type: 'string',
-            description: 'Collection identifier (workspaceId:layerName)',
+            description: 'Collection identifier (workspaceName:collectionName)',
           },
         },
         required: ['collectionId'],
@@ -369,16 +369,16 @@ export async function collectionsRoutes(
       const parsed = parseCollectionId(request.params.collectionId)
       if (!parsed) return sendNotFound(reply)
 
-      const layer = await resolveLayer(options.db, parsed.workspaceName, parsed.layerName)
-      if (!layer) return sendNotFound(reply)
+      const col = await resolveCollection(options.db, parsed.workspaceName, parsed.collectionName)
+      if (!col) return sendNotFound(reply)
 
       const limit = Math.min(Math.max(parseInt(request.query.limit ?? '25', 10) || 25, 1), 100)
       const offset = Math.max(parseInt(request.query.offset ?? '0', 10) || 0, 0)
 
-      const collectionId = `${layer.workspace_name}:${layer.name}`
+      const collectionId = `${col.workspace_name}:${col.name}`
 
       // Resolve output CRS
-      const supportedCrs = buildSupportedCrs(layer.srid)
+      const supportedCrs = buildSupportedCrs(col.srid)
       let outputCrs: { srid: number; crsUri: string }
       try {
         outputCrs = resolveOutputSrid(request.query.crs)
@@ -400,9 +400,9 @@ export async function collectionsRoutes(
       }
 
       const geomExpr =
-        layer.srid === outputCrs.srid
-          ? layer.geometry_column
-          : `ST_Transform(${layer.geometry_column}, ${outputCrs.srid})`
+        col.srid === outputCrs.srid
+          ? col.geometry_column
+          : `ST_Transform(${col.geometry_column}, ${outputCrs.srid})`
 
       // Build WHERE clauses
       const conditions: string[] = []
@@ -423,7 +423,7 @@ export async function collectionsRoutes(
             }
           }
           conditions.push(
-            `${layer.geometry_column} && ST_Transform(ST_MakeEnvelope($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, ${bboxSrid}), ${layer.srid})`,
+            `${col.geometry_column} && ST_Transform(ST_MakeEnvelope($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, ${bboxSrid}), ${col.srid})`,
           )
           params.push(...bbox)
           paramIndex += 4
@@ -453,13 +453,13 @@ export async function collectionsRoutes(
             }
           }
           conditions.push(
-            `ST_Intersects(${layer.geometry_column}, ST_Transform(ST_Buffer(ST_SetSRID(ST_MakePoint($${paramIndex}, $${paramIndex + 1}), 4326)::geography, $${paramIndex + 2})::geometry, ${layer.srid}))`,
+            `ST_Intersects(${col.geometry_column}, ST_Transform(ST_Buffer(ST_SetSRID(ST_MakePoint($${paramIndex}, $${paramIndex + 1}), 4326)::geography, $${paramIndex + 2})::geometry, ${col.srid}))`,
           )
           params.push(lon, lat, radius)
           paramIndex += 3
         } else {
           conditions.push(
-            `ST_Intersects(${layer.geometry_column}, ST_Transform(ST_SetSRID(ST_MakePoint($${paramIndex}, $${paramIndex + 1}), 4326), ${layer.srid}))`,
+            `ST_Intersects(${col.geometry_column}, ST_Transform(ST_SetSRID(ST_MakePoint($${paramIndex}, $${paramIndex + 1}), 4326), ${col.srid}))`,
           )
           params.push(lon, lat)
           paramIndex += 2
@@ -475,7 +475,7 @@ export async function collectionsRoutes(
 
       // Datetime filter (OGC Core)
       if (request.query.datetime) {
-        if (!layer.datetime_column) {
+        if (!col.datetime_column) {
           reply.status(400)
           return {
             statusCode: 400,
@@ -484,7 +484,7 @@ export async function collectionsRoutes(
           }
         }
         const dt = request.query.datetime
-        const dtCol = layer.datetime_column
+        const dtCol = col.datetime_column
         if (dt.includes('/')) {
           // Interval: start/end (either can be '..' for open-ended)
           const [start, end] = dt.split('/')
@@ -522,14 +522,14 @@ export async function collectionsRoutes(
         const { rows: colRows } = await options.db.query<{ column_name: string }>(
           `SELECT column_name FROM information_schema.columns
            WHERE table_name = $1 AND column_name NOT IN ($2)`,
-          [layer.table_name, layer.id_column],
+          [col.table_name, col.id_column],
         )
         const allowedColumns = new Set(colRows.map((r) => r.column_name))
 
         const cqlOptions = {
           startParamIndex: paramIndex,
-          geometryColumn: layer.geometry_column,
-          srid: layer.srid,
+          geometryColumn: col.geometry_column,
+          srid: col.srid,
           allowedColumns,
         }
 
@@ -559,13 +559,13 @@ export async function collectionsRoutes(
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
 
       // CTE + RIGHT JOIN for results + total count in one query
-      const propsExpr = buildPropertiesExpr(layer)
+      const propsExpr = buildPropertiesExpr(col)
       const sql = `
         WITH all_data AS (
-          SELECT ${layer.id_column} AS id,
+          SELECT ${col.id_column} AS id,
                  ST_AsGeoJSON(${geomExpr})::json AS geojson,
                  ${propsExpr} AS properties
-          FROM ${layer.table_name} t
+          FROM ${col.table_name} t
           ${whereClause}
         )
         SELECT id, geojson, properties, full_count
@@ -661,7 +661,7 @@ export async function collectionsRoutes(
         properties: {
           collectionId: {
             type: 'string',
-            description: 'Collection identifier (workspaceId:layerName)',
+            description: 'Collection identifier (workspaceName:collectionName)',
           },
           fid: { type: 'string', description: 'Feature identifier' },
         },
@@ -690,10 +690,10 @@ export async function collectionsRoutes(
       const parsed = parseCollectionId(request.params.collectionId)
       if (!parsed) return sendNotFound(reply)
 
-      const layer = await resolveLayer(options.db, parsed.workspaceName, parsed.layerName)
-      if (!layer) return sendNotFound(reply)
+      const col = await resolveCollection(options.db, parsed.workspaceName, parsed.collectionName)
+      if (!col) return sendNotFound(reply)
 
-      const collectionId = `${layer.workspace_name}:${layer.name}`
+      const collectionId = `${col.workspace_name}:${col.name}`
 
       // Resolve output CRS
       let fidOutputCrs: { srid: number; crsUri: string }
@@ -709,17 +709,17 @@ export async function collectionsRoutes(
       }
 
       const geomExpr =
-        layer.srid === fidOutputCrs.srid
-          ? layer.geometry_column
-          : `ST_Transform(${layer.geometry_column}, ${fidOutputCrs.srid})`
+        col.srid === fidOutputCrs.srid
+          ? col.geometry_column
+          : `ST_Transform(${col.geometry_column}, ${fidOutputCrs.srid})`
 
-      const propsExpr = buildPropertiesExpr(layer)
+      const propsExpr = buildPropertiesExpr(col)
       const { rows } = await options.db.query<FeatureRow>(
-        `SELECT ${layer.id_column} AS id,
+        `SELECT ${col.id_column} AS id,
                 ST_AsGeoJSON(${geomExpr})::json AS geojson,
                 ${propsExpr} AS properties
-         FROM ${layer.table_name} t
-         WHERE ${layer.id_column} = $1`,
+         FROM ${col.table_name} t
+         WHERE ${col.id_column} = $1`,
         [request.params.fid],
       )
 
@@ -759,7 +759,7 @@ export async function collectionsRoutes(
         properties: {
           collectionId: {
             type: 'string',
-            description: 'Collection identifier (workspaceId:layerName)',
+            description: 'Collection identifier (workspaceName:collectionName)',
           },
         },
         required: ['collectionId'],
@@ -769,12 +769,12 @@ export async function collectionsRoutes(
       const parsed = parseCollectionId(request.params.collectionId)
       if (!parsed) return sendNotFound(reply)
 
-      const layer = await resolveLayer(options.db, parsed.workspaceName, parsed.layerName)
-      if (!layer) return sendNotFound(reply)
+      const col = await resolveCollection(options.db, parsed.workspaceName, parsed.collectionName)
+      if (!col) return sendNotFound(reply)
 
-      const collectionId = `${layer.workspace_name}:${layer.name}`
+      const collectionId = `${col.workspace_name}:${col.name}`
 
-      const exposedCols = await getExposedColumns(options.db, layer)
+      const exposedCols = await getExposedColumns(options.db, col)
 
       const pgToJsonType: Record<string, { type: string }> = {
         integer: { type: 'integer' },
@@ -827,7 +827,7 @@ export async function collectionsRoutes(
         properties: {
           collectionId: {
             type: 'string',
-            description: 'Collection identifier (workspaceId:layerName)',
+            description: 'Collection identifier (workspaceName:collectionName)',
           },
         },
         required: ['collectionId'],
@@ -844,21 +844,21 @@ export async function collectionsRoutes(
         bbox: number[] | null
         geometry_type: string | null
       }>(
-        `SELECT w.name AS workspace_name, l.name, l.description, l.bbox, l.geometry_type
-         FROM sanson_layers l
-         JOIN sanson_workspaces w ON w.id = l.workspace_id
-         WHERE w.name = $1 AND l.name = $2`,
-        [parsed.workspaceName, parsed.layerName],
+        `SELECT w.name AS workspace_name, c.name, c.description, c.bbox, c.geometry_type
+         FROM sanson_collections c
+         JOIN sanson_workspaces w ON w.id = c.workspace_id
+         WHERE w.name = $1 AND c.name = $2`,
+        [parsed.workspaceName, parsed.collectionName],
       )
 
       if (rows.length === 0) return sendNotFound(reply)
 
-      const layer = rows[0]
-      const collectionId = `${layer.workspace_name}:${layer.name}`
+      const col = rows[0]
+      const collectionId = `${col.workspace_name}:${col.name}`
 
       return {
-        title: layer.name,
-        description: layer.description,
+        title: col.name,
+        description: col.description,
         dataType: 'vector',
         crs: 'http://www.opengis.net/def/crs/EPSG/0/3857',
         tileMatrixSetId: 'WebMercatorQuad',
@@ -892,11 +892,11 @@ export async function collectionsRoutes(
             type: 'application/json',
           },
         ],
-        ...(layer.bbox
+        ...(col.bbox
           ? {
               boundingBox: {
-                lowerLeft: [layer.bbox[0], layer.bbox[1]],
-                upperRight: [layer.bbox[2], layer.bbox[3]],
+                lowerLeft: [col.bbox[0], col.bbox[1]],
+                upperRight: [col.bbox[2], col.bbox[3]],
                 crs: 'http://www.opengis.net/def/crs/OGC/1.3/CRS84',
               },
             }
@@ -916,7 +916,7 @@ export async function collectionsRoutes(
         properties: {
           collectionId: {
             type: 'string',
-            description: 'Collection identifier (workspaceId:layerName)',
+            description: 'Collection identifier (workspaceName:collectionName)',
           },
         },
         required: ['collectionId'],
@@ -927,11 +927,11 @@ export async function collectionsRoutes(
       if (!parsed) return sendNotFound(reply)
 
       const { rows } = await options.db.query<{ style: object | null }>(
-        `SELECT l.style
-         FROM sanson_layers l
-         JOIN sanson_workspaces w ON w.id = l.workspace_id
-         WHERE w.name = $1 AND l.name = $2`,
-        [parsed.workspaceName, parsed.layerName],
+        `SELECT c.style
+         FROM sanson_collections c
+         JOIN sanson_workspaces w ON w.id = c.workspace_id
+         WHERE w.name = $1 AND c.name = $2`,
+        [parsed.workspaceName, parsed.collectionName],
       )
 
       if (rows.length === 0) return sendNotFound(reply)
@@ -956,7 +956,7 @@ export async function collectionsRoutes(
         properties: {
           collectionId: {
             type: 'string',
-            description: 'Collection identifier (workspaceId:layerName)',
+            description: 'Collection identifier (workspaceName:collectionName)',
           },
           z: { type: 'string', description: 'Zoom level' },
           x: { type: 'string', description: 'Tile column' },
@@ -969,8 +969,8 @@ export async function collectionsRoutes(
       const parsed = parseCollectionId(request.params.collectionId)
       if (!parsed) return sendNotFound(reply)
 
-      const layer = await resolveLayer(options.db, parsed.workspaceName, parsed.layerName)
-      if (!layer) return sendNotFound(reply)
+      const col = await resolveCollection(options.db, parsed.workspaceName, parsed.collectionName)
+      if (!col) return sendNotFound(reply)
 
       const z = parseInt(request.params.z, 10)
       const x = parseInt(request.params.x, 10)
@@ -982,7 +982,7 @@ export async function collectionsRoutes(
       }
 
       // Get columns for tile properties (respects exposed_fields)
-      const exposedCols = await getExposedColumns(options.db, layer)
+      const exposedCols = await getExposedColumns(options.db, col)
 
       const propColumns = exposedCols
         .map((c) =>
@@ -994,22 +994,22 @@ export async function collectionsRoutes(
       const sql = `
         WITH mvtgeom AS (
           SELECT ST_AsMVTGeom(
-            ST_Transform(${layer.geometry_column}, 3857),
+            ST_Transform(${col.geometry_column}, 3857),
             ST_TileEnvelope($1, $2, $3),
             extent => 4096,
             buffer => 256
           ) AS geom
           ${propSelect}
-          FROM ${layer.table_name}
-          WHERE ${layer.geometry_column} && ST_Transform(
+          FROM ${col.table_name}
+          WHERE ${col.geometry_column} && ST_Transform(
             ST_TileEnvelope($1, $2, $3, margin => (256.0 / 4096)),
-            ${layer.srid}
+            ${col.srid}
           )
         )
         SELECT ST_AsMVT(mvtgeom.*, $4) AS mvt FROM mvtgeom
       `
 
-      const { rows } = await options.db.query<{ mvt: Buffer }>(sql, [z, x, y, layer.name])
+      const { rows } = await options.db.query<{ mvt: Buffer }>(sql, [z, x, y, col.name])
 
       const mvt = rows[0]?.mvt
 

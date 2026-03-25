@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import { api } from '../services/api'
-import type { Layer, Workspace } from '../services/api'
+import type { Collection, Workspace } from '../services/api'
 
-export function Layers() {
+export function Collections() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const [layers, setLayers] = useState<Layer[]>([])
+  const [collections, setCollections] = useState<Collection[]>([])
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -13,9 +13,9 @@ export function Layers() {
 
   const load = () => {
     setLoading(true)
-    Promise.all([api.layers.list(selectedWorkspace || undefined), api.workspaces.list()]).then(
-      ([ly, ws]) => {
-        setLayers(ly)
+    Promise.all([api.collections.list(selectedWorkspace || undefined), api.workspaces.list()]).then(
+      ([cols, ws]) => {
+        setCollections(cols)
         setWorkspaces(ws)
         setLoading(false)
       },
@@ -25,15 +25,15 @@ export function Layers() {
   useEffect(load, [selectedWorkspace])
 
   const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`Delete layer "${name}"? This cannot be undone.`)) return
-    await api.layers.delete(id)
+    if (!confirm(`Delete collection "${name}"? This cannot be undone.`)) return
+    await api.collections.delete(id)
     load()
   }
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Layers</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Collections</h1>
         <Link
           to="/import"
           className="bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-800 transition-colors"
@@ -66,9 +66,9 @@ export function Layers() {
             <div key={i} className="h-16 bg-gray-200 rounded-lg" />
           ))}
         </div>
-      ) : layers.length === 0 ? (
+      ) : collections.length === 0 ? (
         <div className="text-center py-12 text-gray-500">
-          <p className="mb-2">No layers found.</p>
+          <p className="mb-2">No collections found.</p>
           <Link to="/import" className="text-primary-600 hover:text-primary-800">
             Import some data
           </Link>
@@ -87,29 +87,29 @@ export function Layers() {
               </tr>
             </thead>
             <tbody>
-              {layers.map((layer) => (
-                <tr key={layer.id} className="border-b border-gray-100 last:border-0">
+              {collections.map((col) => (
+                <tr key={col.id} className="border-b border-gray-100 last:border-0">
                   <td className="px-4 py-3">
                     <Link
-                      to={`/layers/${layer.id}`}
+                      to={`/collections/${col.id}`}
                       className="font-medium text-primary-700 hover:text-primary-900"
                     >
-                      {layer.name}
+                      {col.name}
                     </Link>
                   </td>
-                  <td className="px-4 py-3 text-gray-600">{layer.workspace_name}</td>
+                  <td className="px-4 py-3 text-gray-600">{col.workspace_name}</td>
                   <td className="px-4 py-3">
                     <span className="inline-block bg-primary-50 text-primary-700 text-xs px-2 py-0.5 rounded">
-                      {layer.geometry_type ?? '—'}
+                      {col.geometry_type ?? '—'}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-gray-500">{layer.srid}</td>
+                  <td className="px-4 py-3 text-gray-500">{col.srid}</td>
                   <td className="px-4 py-3 text-right text-gray-600">
-                    {layer.feature_count?.toLocaleString() ?? '—'}
+                    {col.feature_count?.toLocaleString() ?? '—'}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <button
-                      onClick={() => handleDelete(layer.id, layer.name)}
+                      onClick={() => handleDelete(col.id, col.name)}
                       className="text-red-500 hover:text-red-700 text-sm"
                     >
                       Delete

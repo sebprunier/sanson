@@ -59,18 +59,18 @@ describe('GET /collections', () => {
     expect(body.links[0].rel).toBe('self')
   })
 
-  it('returns collections when layers exist', async () => {
+  it('returns collections when collections exist', async () => {
     const db = new Pool({ connectionString: container.getConnectionUri() })
     await db.query(initSql)
 
-    // Insert a workspace and a layer
+    // Insert a workspace and a collection
     await db.query(
       `INSERT INTO sanson_workspaces (id, name, description)
        VALUES ('00000000-0000-0000-0000-000000000001', 'risques', 'Risk data')
        ON CONFLICT DO NOTHING`,
     )
     await db.query(
-      `INSERT INTO sanson_layers (workspace_id, name, description, table_name, bbox)
+      `INSERT INTO sanson_collections (workspace_id, name, description, table_name, bbox)
        VALUES ('00000000-0000-0000-0000-000000000001', 'icpe', 'Classified facilities', 'risques_icpe', '[-5.1, 41.3, 9.6, 51.1]')
        ON CONFLICT DO NOTHING`,
     )
@@ -102,7 +102,7 @@ describe('GET /collections', () => {
        ON CONFLICT DO NOTHING`,
     )
     await db.query(
-      `INSERT INTO sanson_layers (workspace_id, name, table_name)
+      `INSERT INTO sanson_collections (workspace_id, name, table_name)
        VALUES ('00000000-0000-0000-0000-000000000002', 'routes', 'transport_routes')
        ON CONFLICT DO NOTHING`,
     )
@@ -134,7 +134,7 @@ describe('GET /collections/:collectionId', () => {
        VALUES ('00000000-0000-0000-0000-000000000010', 'energie', 'Energy data')`,
     )
     await db.query(
-      `INSERT INTO sanson_layers (workspace_id, name, description, table_name, bbox)
+      `INSERT INTO sanson_collections (workspace_id, name, description, table_name, bbox)
        VALUES ('00000000-0000-0000-0000-000000000010', 'centrales', 'Nuclear power plants', 'energie_centrales', '[-4.5, 42.0, 8.2, 51.1]')`,
     )
     await db.end()
@@ -199,7 +199,7 @@ describe('GET /collections/:collectionId/items', () => {
     const db = new Pool({ connectionString: container.getConnectionUri() })
     await db.query(initSql)
 
-    // Create a workspace and layer
+    // Create a workspace and collection
     await db.query(
       `INSERT INTO sanson_workspaces (id, name)
        VALUES ('00000000-0000-0000-0000-000000000020', 'test')`,
@@ -221,9 +221,9 @@ describe('GET /collections/:collectionId/items', () => {
         ('Marseille', ST_SetSRID(ST_MakePoint(5.37, 43.30), 4326))
     `)
 
-    // Register the layer
+    // Register the collection
     await db.query(
-      `INSERT INTO sanson_layers (workspace_id, name, table_name, geometry_column, id_column, srid)
+      `INSERT INTO sanson_collections (workspace_id, name, table_name, geometry_column, id_column, srid)
        VALUES ('00000000-0000-0000-0000-000000000020', 'sites', 'test_sites', 'geom', 'id', 4326)`,
     )
 
@@ -483,7 +483,7 @@ describe('GET /collections/:collectionId/items — datetime filter', () => {
     `)
 
     await db.query(
-      `INSERT INTO sanson_layers (workspace_id, name, table_name, geometry_column, id_column, datetime_column, srid)
+      `INSERT INTO sanson_collections (workspace_id, name, table_name, geometry_column, id_column, datetime_column, srid)
        VALUES ('00000000-0000-0000-0000-000000000030', 'events', 'test_events', 'geom', 'id', 'event_date', 4326)`,
     )
 
@@ -540,7 +540,7 @@ describe('GET /collections/:collectionId/items — datetime filter', () => {
 
   it('returns 400 when collection has no datetime column', async () => {
     // Use the 'test:sites' collection from another describe if available,
-    // or create a layer without datetime_column
+    // or create a collection without datetime_column
     const db = new Pool({ connectionString: container.getConnectionUri() })
 
     await db.query(`
@@ -550,7 +550,7 @@ describe('GET /collections/:collectionId/items — datetime filter', () => {
       )
     `)
     await db.query(
-      `INSERT INTO sanson_layers (workspace_id, name, table_name, geometry_column, id_column, srid)
+      `INSERT INTO sanson_collections (workspace_id, name, table_name, geometry_column, id_column, srid)
        VALUES ('00000000-0000-0000-0000-000000000030', 'nodatetime', 'test_nodatetime', 'geom', 'id', 4326)
        ON CONFLICT DO NOTHING`,
     )
@@ -594,7 +594,7 @@ describe('CRS by Reference', () => {
     `)
 
     await db.query(
-      `INSERT INTO sanson_layers (workspace_id, name, table_name, geometry_column, id_column, srid)
+      `INSERT INTO sanson_collections (workspace_id, name, table_name, geometry_column, id_column, srid)
        VALUES ('00000000-0000-0000-0000-000000000070', 'points', 'crs_points', 'geom', 'id', 4326)`,
     )
 
@@ -722,7 +722,7 @@ describe('GET /collections/:collectionId/tiles/:z/:x/:y.pbf', () => {
     `)
 
     await db.query(
-      `INSERT INTO sanson_layers (workspace_id, name, table_name, geometry_column, id_column, srid)
+      `INSERT INTO sanson_collections (workspace_id, name, table_name, geometry_column, id_column, srid)
        VALUES ('00000000-0000-0000-0000-000000000040', 'tiles', 'test_tiles', 'geom', 'id', 4326)`,
     )
 
@@ -816,15 +816,15 @@ describe('exposed_fields filtering', () => {
         ('Lyon',       522969, 'SEC-69', ST_SetSRID(ST_MakePoint(4.83, 45.76), 4326))
     `)
 
-    // Layer WITHOUT exposed_fields (null) — should expose all columns
+    // Collection WITHOUT exposed_fields (null) — should expose all columns
     await db.query(
-      `INSERT INTO sanson_layers (id, workspace_id, name, table_name, geometry_column, id_column, srid)
+      `INSERT INTO sanson_collections (id, workspace_id, name, table_name, geometry_column, id_column, srid)
        VALUES ('00000000-0000-0000-0000-000000000051', '00000000-0000-0000-0000-000000000050', 'all_fields', 'test_exposed', 'geom', 'id', 4326)`,
     )
 
-    // Layer WITH exposed_fields — only name (aliased to "city") and population
+    // Collection WITH exposed_fields — only name (aliased to "city") and population
     await db.query(
-      `INSERT INTO sanson_layers (id, workspace_id, name, table_name, geometry_column, id_column, srid, exposed_fields)
+      `INSERT INTO sanson_collections (id, workspace_id, name, table_name, geometry_column, id_column, srid, exposed_fields)
        VALUES ('00000000-0000-0000-0000-000000000052', '00000000-0000-0000-0000-000000000050', 'limited_fields', 'test_exposed', 'geom', 'id', 4326,
                $1)`,
       [JSON.stringify([{ source: 'name', alias: 'city' }, { source: 'population' }])],
@@ -935,21 +935,21 @@ describe('GET /collections/:collectionId/style', () => {
     await db.query(
       `INSERT INTO sanson_workspaces (id, name) VALUES ('00000000-0000-0000-0000-000000000090', 'stylews')`,
     )
-    // Layer with a style
+    // Collection with a style
     await db.query(`
       CREATE TABLE data_styled (id SERIAL PRIMARY KEY, geom GEOMETRY(Point, 4326), name TEXT)
     `)
     await db.query(
-      `INSERT INTO sanson_layers (workspace_id, name, table_name, srid, style)
+      `INSERT INTO sanson_collections (workspace_id, name, table_name, srid, style)
        VALUES ('00000000-0000-0000-0000-000000000090', 'styled', 'data_styled', 4326,
                '{"type":"single","fill_color":"#ff0000"}'::jsonb)`,
     )
-    // Layer without a style
+    // Collection without a style
     await db.query(`
       CREATE TABLE data_unstyled (id SERIAL PRIMARY KEY, geom GEOMETRY(Point, 4326))
     `)
     await db.query(
-      `INSERT INTO sanson_layers (workspace_id, name, table_name, srid)
+      `INSERT INTO sanson_collections (workspace_id, name, table_name, srid)
        VALUES ('00000000-0000-0000-0000-000000000090', 'unstyled', 'data_unstyled', 4326)`,
     )
     await db.end()

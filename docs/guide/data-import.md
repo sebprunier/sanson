@@ -1,6 +1,6 @@
 # Data Import
 
-Sanson supports importing GeoJSON, CSV, and Shapefile data to create geographic layers. Imports are processed asynchronously with real-time progress tracking.
+Sanson supports importing GeoJSON, CSV, and Shapefile data to create geographic collections. Imports are processed asynchronously with real-time progress tracking.
 
 ## Supported formats
 
@@ -16,7 +16,7 @@ Sanson supports importing GeoJSON, CSV, and Shapefile data to create geographic 
 1. Navigate to the **Import** page in the admin UI
 2. Select a **GeoJSON, CSV, or Shapefile (.zip)** from your computer
 3. Choose the target **workspace** (defaults to `default`)
-4. Set the **layer name** (auto-generated from the filename)
+4. Set the **collection name** (auto-generated from the filename)
 5. Set the **SRID** (defaults to 4326 / WGS84)
 6. For CSV files, optionally configure the **separator**, **longitude column**, and **latitude column** (all are auto-detected by default)
 7. Click **Import**
@@ -28,7 +28,7 @@ The UI transitions to a progress view showing:
 - Feature count (imported / total)
 - Live structured logs
 
-On completion, a **View layer** button links directly to the layer detail page with map and table views.
+On completion, a **View collection** button links directly to the collection detail page with map and table views.
 
 ## Import via the API
 
@@ -95,7 +95,7 @@ The import pipeline is fully asynchronous:
 2. **Queue** — a pg-boss job is created with the import parameters
 3. **Process** — the worker picks up the job and processes the file (format-specific, see below)
 4. **Index** — a GIST spatial index is created on the geometry column
-5. **Metadata** — layer metadata is updated (bounding box, feature count, geometry type)
+5. **Metadata** — collection metadata is updated (bounding box, feature count, geometry type)
 6. **Cleanup** — the uploaded file is deleted
 
 ## GeoJSON specifics
@@ -170,7 +170,7 @@ Like GeoJSON, geometries are promoted to their Multi variant (`-nlt PROMOTE_TO_M
 
 ### Re-import
 
-When importing into an existing layer (same workspace + name), the data table is dropped and recreated. This ensures no stale data from previous imports.
+When importing into an existing collection (same workspace + name), the data table is dropped and recreated. This ensures no stale data from previous imports.
 
 ## File size
 

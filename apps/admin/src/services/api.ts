@@ -43,7 +43,7 @@ export interface ClassifyResult {
   max?: number
 }
 
-export interface Layer {
+export interface Collection {
   id: string
   workspace_id: string
   workspace_name: string
@@ -82,7 +82,7 @@ export interface ColumnSchema {
   max?: string | null
 }
 
-export interface LayerSchema {
+export interface CollectionSchema {
   total_count: number
   columns: ColumnSchema[]
 }
@@ -113,8 +113,8 @@ export interface ImportAccepted {
 export interface JobStatus {
   id: string
   job_id: string | null
-  layer_id: string | null
-  layer_name: string | null
+  collection_id: string | null
+  collection_name: string | null
   source_file: string
   source_srid: number
   target_srid: number
@@ -173,16 +173,16 @@ export const api = {
     delete: (id: string) => request<void>(`/api/admin/workspaces/${id}`, { method: 'DELETE' }),
   },
 
-  layers: {
+  collections: {
     list: (workspaceId?: string) => {
       const qs = workspaceId ? `?workspace_id=${workspaceId}` : ''
-      return request<Layer[]>(`/api/admin/layers${qs}`)
+      return request<Collection[]>(`/api/admin/collections${qs}`)
     },
-    get: (id: string) => request<Layer>(`/api/admin/layers/${id}`),
-    schema: (id: string) => request<LayerSchema>(`/api/admin/layers/${id}/schema`),
-    history: (id: string) => request<ImportHistory[]>(`/api/admin/layers/${id}/history`),
+    get: (id: string) => request<Collection>(`/api/admin/collections/${id}`),
+    schema: (id: string) => request<CollectionSchema>(`/api/admin/collections/${id}/schema`),
+    history: (id: string) => request<ImportHistory[]>(`/api/admin/collections/${id}/history`),
     update: (id: string, data: Record<string, unknown>) =>
-      request<Layer>(`/api/admin/layers/${id}`, {
+      request<Collection>(`/api/admin/collections/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
@@ -190,15 +190,15 @@ export const api = {
     classify: (id: string, params: { field: string; type: string; classes?: number }) => {
       const qs = new URLSearchParams({ field: params.field, type: params.type })
       if (params.classes) qs.set('classes', String(params.classes))
-      return request<ClassifyResult>(`/api/admin/layers/${id}/classify?${qs}`)
+      return request<ClassifyResult>(`/api/admin/collections/${id}/classify?${qs}`)
     },
-    delete: (id: string) => request<void>(`/api/admin/layers/${id}`, { method: 'DELETE' }),
-    exportUrl: (id: string) => `/api/admin/layers/${id}/export`,
+    delete: (id: string) => request<void>(`/api/admin/collections/${id}`, { method: 'DELETE' }),
+    exportUrl: (id: string) => `/api/admin/collections/${id}/export`,
   },
 
   import: (data: {
     workspace_id: string
-    layer_name: string
+    collection_name: string
     file: File
     srid?: number
     separator?: string
@@ -207,7 +207,7 @@ export const api = {
   }) => {
     const form = new FormData()
     form.append('workspace_id', data.workspace_id)
-    form.append('layer_name', data.layer_name)
+    form.append('collection_name', data.collection_name)
     if (data.srid) form.append('srid', String(data.srid))
     if (data.separator) form.append('separator', data.separator)
     if (data.longitude) form.append('longitude', data.longitude)
@@ -220,10 +220,15 @@ export const api = {
   },
 
   jobs: {
-    list: (params?: { status?: string; layer_id?: string; limit?: number; offset?: number }) => {
+    list: (params?: {
+      status?: string
+      collection_id?: string
+      limit?: number
+      offset?: number
+    }) => {
       const qs = new URLSearchParams()
       if (params?.status) qs.set('status', params.status)
-      if (params?.layer_id) qs.set('layer_id', params.layer_id)
+      if (params?.collection_id) qs.set('collection_id', params.collection_id)
       if (params?.limit) qs.set('limit', String(params.limit))
       if (params?.offset) qs.set('offset', String(params.offset))
       const query = qs.toString()

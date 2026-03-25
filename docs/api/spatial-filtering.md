@@ -50,7 +50,7 @@ GET /collections/default:communes/items?lat=45.764&lon=4.8357&radius=5000
 GET /collections/{id}/items?datetime={value}
 ```
 
-Filters features by a temporal property. Requires the layer to have a configured `datetime_column`.
+Filters features by a temporal property. Requires the collection to have a configured `datetime_column`.
 
 | Format     | Description       | Example                           |
 | ---------- | ----------------- | --------------------------------- |

@@ -38,14 +38,14 @@ Founding principle: do one thing, do it well. Sanson is a geographic data publis
 
 ### Workspace
 
-Logical namespace that groups layers. Used to organize data by theme or project.
+Logical namespace that groups collections. Used to organize data by theme or project.
 Example: `transport`, `risques`, `administratif`.
 
 A `default` workspace is always present and created at initialization. The admin UI uses it when no specific workspace is selected, keeping the experience simple for users who don't need to organize data into multiple workspaces.
 
-### Layer
+### Collection
 
-Central unit of Sanson. A layer represents a geographic dataset exposed via the API. In OGC API Features vocabulary, a layer corresponds to a **Collection**. It is associated with:
+Central unit of Sanson. A collection represents a geographic dataset exposed via the API. It corresponds to an **OGC API Features Collection**. It is associated with:
 
 - a source PostGIS table (with GIST spatial index)
 - a workspace
@@ -57,7 +57,7 @@ Central unit of Sanson. A layer represents a geographic dataset exposed via the 
 
 ### Import
 
-Ingestion operation for a geographic data file (GeoJSON, Shapefile) to create or populate a layer. An import is processed asynchronously by a Worker node. Its state is tracked via a Job.
+Ingestion operation for a geographic data file (GeoJSON, Shapefile) to create or populate a collection. An import is processed asynchronously by a Worker node. Its state is tracked via a Job.
 
 ### Job
 
@@ -65,7 +65,7 @@ Asynchronous unit of work managed by the queue. A job has a type (`ingest`), a s
 
 ### Style
 
-A Mapbox GL JSON style associated with a layer, used in the administration interface for map visualization.
+A Mapbox GL JSON style associated with a collection, used in the administration interface for map visualization.
 
 ---
 
@@ -127,8 +127,8 @@ graph TD
     end
 
     subgraph DB ["PostgreSQL + PostGIS"]
-        GeoData["Geo data (per-layer tables + GIST indexes)"]
-        Meta["Metadata (workspaces, layers, styles)"]
+        GeoData["Geo data (per-collection tables + GIST indexes)"]
+        Meta["Metadata (workspaces, collections, styles)"]
         Queue["Job queue (pg-boss)"]
     end
 
@@ -137,7 +137,7 @@ graph TD
         W2["2. Parse source file (GeoJSON / ogr2ogr)"]
         W3["3. Create table + insert features (batches of 500)"]
         W4["4. Create GIST spatial index"]
-        W5["5. Update layer metadata (bbox, feature_count)"]
+        W5["5. Update collection metadata (bbox, feature_count)"]
         W6["6. Update progress + logs in sanson_import_history"]
         W1 --> W2 --> W3 --> W4 --> W5 --> W6
     end
@@ -151,10 +151,10 @@ graph TD
 
 Sanson exposes two distinct URL spaces:
 
-| Prefix        | Role                       | Examples                                           |
-| ------------- | -------------------------- | -------------------------------------------------- |
-| `/` (root)    | OGC API Features endpoints | `/`, `/conformance`, `/api`, `/collections/...`    |
-| `/api/admin/` | Administration API         | `/api/admin/jobs/...`, `/api/admin/workspaces/...` |
+| Prefix        | Role                       | Examples                                                                         |
+| ------------- | -------------------------- | -------------------------------------------------------------------------------- |
+| `/` (root)    | OGC API Features endpoints | `/`, `/conformance`, `/api`, `/collections/...`                                  |
+| `/api/admin/` | Administration API         | `/api/admin/jobs/...`, `/api/admin/workspaces/...`, `/api/admin/collections/...` |
 
 This separation ensures that OGC endpoints live exactly where the spec expects them (at the root), and that administration functions do not pollute the OGC namespace.
 
@@ -169,7 +169,7 @@ flowchart TD
     Table["Create PostGIS table if needed"]
     Insert["Insert features in batches of 500<br/>Update progress every batch"]
     Index["Create GIST spatial index<br/>on the geometry column"]
-    Metadata["Update layer metadata<br/>(bbox, feature_count, temporal_extent)"]
+    Metadata["Update collection metadata<br/>(bbox, feature_count, temporal_extent)"]
     Cleanup["Delete uploaded file"]
 
     Upload --> Save --> Queue
@@ -214,7 +214,7 @@ interface IngestJobPayload {
   importHistoryId: string // UUID linking to sanson_import_history
   filePath: string // path to uploaded file on disk
   workspaceId: string
-  layerName: string
+  collectionName: string
   srid: number
   sourceFileName: string
 }
@@ -225,7 +225,7 @@ interface IngestJobPayload {
 1. API receives upload → saves file to disk → creates `sanson_import_history` row (`status = 'pending'`) → `boss.send('sanson-ingest', payload)` → returns `202 Accepted`
 2. Worker picks up job → updates `status = 'running'`, `started_at = now()`
 3. Worker processes → parses file, creates table, inserts features in batches of 500, updates `progress` and `imported_features` every batch
-4. Worker completes → updates `status = 'completed'`, `completed_at = now()`, `progress = 100`, computes bbox and updates layer metadata
+4. Worker completes → updates `status = 'completed'`, `completed_at = now()`, `progress = 100`, computes bbox and updates collection metadata
 5. Worker fails → updates `status = 'failed'`, `error = <message>`, `completed_at = now()`. pg-boss handles retry according to `retryLimit`.
 
 pg-boss features used:
@@ -283,7 +283,7 @@ This pattern (from auxalentours-api) avoids a second round trip to the database 
 | Phase            | Behavior                                                                                                                                                                                                                                                                                                          |
 | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Import**       | Automatic source SRID detection via `ogr2ogr` / GDAL. If not detectable, mandatory field in the UI.                                                                                                                                                                                                               |
-| **Storage**      | Configurable SRID per layer. Default: **WGS84 (EPSG:4326)**. Storing in the native data SRID avoids reprojection on every import.                                                                                                                                                                                 |
+| **Storage**      | Configurable SRID per collection. Default: **WGS84 (EPSG:4326)**. Storing in the native data SRID avoids reprojection on every import.                                                                                                                                                                            |
 | **API exposure** | Always **WGS84 (4326)** by default — required by OGC API Features (GeoJSON) conformance. Optional `?crs=XXXX` parameter (OGC name: `crs`) to expose in another projection — on-the-fly `ST_Transform` on the PostGIS side. Note: if the requested CRS differs from the storage SRID, the query is more expensive. |
 | **Vector tiles** | Always **Web Mercator (EPSG:3857)** — MVT standard. `ST_Transform` applied in `ST_AsMVTGeom`.                                                                                                                                                                                                                     |
 
@@ -323,7 +323,7 @@ GET /collections/{collectionId}/items/{fid}                  Feature by identifi
 GET /collections/{collectionId}/queryables                   Filterable properties (JSON Schema)
 ```
 
-**Collection naming convention:** `{workspaceId}:{layerName}` (e.g., `risques:icpe`).
+**Collection naming convention:** `{workspaceId}:{collectionName}` (e.g., `risques:icpe`).
 
 > Note: the `:` separator is a reserved character in RFC 3986 but is widely used in practice (GeoServer uses the same convention). If conflicts arise with a strict proxy or WAF, clients can encode it as `risques%3Aicpe`.
 
@@ -470,8 +470,8 @@ Pagination links are present both in the JSON body (`links`) and in HTTP headers
 - Automatic GIST spatial index creation
 - Append mode if the table already exists
 - Real-time progress tracking in the UI
-- Import history per layer (date, source file, feature count, status, error logs)
-- Automatic layer metadata recalculation after import (bbox, feature_count, temporal_extent)
+- Import history per collection (date, source file, feature count, status, error logs)
+- Automatic collection metadata recalculation after import (bbox, feature_count, temporal_extent)
 
 ### 8.2 Data API — Query parameters
 
@@ -483,7 +483,7 @@ Pagination links are present both in the JSON body (`links`) and in HTTP headers
 
 #### Sanson geographic shortcuts
 
-Non-standard convenience parameters, translated server-side into PostGIS queries. The geometry column used is the one configured in `sanson_layers.geometry_column`.
+Non-standard convenience parameters, translated server-side into PostGIS queries. The geometry column used is the one configured in `sanson_collections.geometry_column`.
 
 | Parameter                | Description                                                                                                                    |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
@@ -498,7 +498,7 @@ Non-standard convenience parameters, translated server-side into PostGIS queries
 | ---------- | ---------------------------- | ----------------------------------------------------------- |
 | `datetime` | ISO 8601 instant or interval | `?datetime=2024-01-01` or `?datetime=2023-01-01/2024-01-01` |
 
-Requires the layer to have a configured `datetime_column`.
+Requires the collection to have a configured `datetime_column`.
 
 #### Attribute filters — CQL2 Text (OGC CQL2)
 
@@ -582,13 +582,13 @@ SELECT ST_AsMVT(mvtgeom.*, :layerName) FROM mvtgeom;
 GET /collections/{collectionId}/queryables
 ```
 
-Returns a JSON Schema describing the filterable properties of the collection. Dynamically generated from `sanson_layers.exposed_fields` and the source PostGIS table schema. Allows GIS clients (QGIS) to build CQL2 filters without prior knowledge of the schema.
+Returns a JSON Schema describing the filterable properties of the collection. Dynamically generated from `sanson_collections.exposed_fields` and the source PostGIS table schema. Allows GIS clients (QGIS) to build CQL2 filters without prior knowledge of the schema.
 
 ### 8.6 Jobs (Administration API)
 
 ```
 POST /api/admin/import              Upload file + queue ingestion job (returns 202 Accepted)
-GET  /api/admin/jobs                Job history (filterable by status, layer_id, limit/offset)
+GET  /api/admin/jobs                Job history (filterable by status, collection_id, limit/offset)
 GET  /api/admin/jobs/{jobId}        Job state, progress, and logs
 ```
 
@@ -608,7 +608,7 @@ GET  /api/admin/jobs/{jobId}        Job state, progress, and logs
 {
   "id": "uuid",
   "job_id": "uuid",
-  "layer_id": "uuid",
+  "collection_id": "uuid",
   "source_file": "centrales.geojson",
   "status": "running",
   "progress": 45,
@@ -627,9 +627,9 @@ GET  /api/admin/jobs/{jobId}        Job state, progress, and logs
 }
 ```
 
-**`GET /api/admin/jobs` query params:** `?status=pending|running|completed|failed`, `?layer_id=uuid`, `?limit=20&offset=0`. Returns paginated list ordered by `created_at DESC`.
+**`GET /api/admin/jobs` query params:** `?status=pending|running|completed|failed`, `?collection_id=uuid`, `?limit=20&offset=0`. Returns paginated list ordered by `created_at DESC`.
 
-### 8.7 Workspaces and Layers (Administration API)
+### 8.7 Workspaces and Collections (Administration API)
 
 ```
 GET    /api/admin/workspaces                    List workspaces
@@ -638,11 +638,11 @@ GET    /api/admin/workspaces/{id}               Workspace details
 PUT    /api/admin/workspaces/{id}               Update a workspace
 DELETE /api/admin/workspaces/{id}               Delete a workspace
 
-GET    /api/admin/layers                        List layers (filterable by workspace)
-POST   /api/admin/layers                        Create a layer
-GET    /api/admin/layers/{id}                   Layer details
-PUT    /api/admin/layers/{id}                   Update a layer
-DELETE /api/admin/layers/{id}                   Delete a layer
+GET    /api/admin/collections                        List collections (filterable by workspace)
+POST   /api/admin/collections                        Create a collection
+GET    /api/admin/collections/{id}                   Collection details
+PUT    /api/admin/collections/{id}                   Update a collection
+DELETE /api/admin/collections/{id}                   Delete a collection
 ```
 
 ---
@@ -653,22 +653,22 @@ Single-page React application, served by API nodes.
 
 ### Dashboard
 
-- Number of workspaces, layers, total features
+- Number of workspaces, collections, total features
 - PostgreSQL/PostGIS connection status
 - Recent jobs (last 24h) with their status
 
-### Workspace and Layer management
+### Workspace and Collection management
 
-- List of workspaces → list of layers per workspace
+- List of workspaces → list of collections per workspace
 - Create / edit / delete workspace
-- Create / edit / delete layer
+- Create / edit / delete collection
   - Name, description, attribution
   - Storage SRID
   - Exposed fields (selection, renaming)
   - Datetime field (for OGC temporal filter)
   - Mapbox GL style (JSON editor)
 
-### Layer exploration
+### Collection exploration
 
 - **Map view**: data visualization with MapLibre GL, configurable style
 - **Table view**: tabular exploration with sorting and search
@@ -677,12 +677,12 @@ Single-page React application, served by API nodes.
 ### Data import
 
 - File upload (GeoJSON or Shapefile ZIP)
-- Workspace and target layer selection (existing or new)
+- Workspace and target collection selection (existing or new)
 - Target SRID choice (default: 4326)
 - On submit: receives `202 Accepted` with `import_id`, transitions to progress view
 - Progress view: status badge, progress bar (0-100%), features count (N / total), live log feed
 - Polling `GET /api/admin/jobs/:importId` every 2 seconds while status is `pending` or `running`
-- On completion: success view with link to layer
+- On completion: success view with link to collection
 - On failure: error message and logs
 
 ### API explorer
@@ -704,8 +704,8 @@ CREATE TABLE sanson_workspaces (
     updated_at  TIMESTAMPTZ DEFAULT now()
 );
 
--- Layers (= OGC Collections)
-CREATE TABLE sanson_layers (
+-- Collections (= OGC Collections)
+CREATE TABLE sanson_collections (
     id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id      UUID REFERENCES sanson_workspaces(id) ON DELETE CASCADE,
     name              VARCHAR(100) NOT NULL,
@@ -730,7 +730,7 @@ CREATE TABLE sanson_layers (
 -- Import history (also serves as job tracking table)
 CREATE TABLE sanson_import_history (
     id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    layer_id           UUID REFERENCES sanson_layers(id),
+    collection_id      UUID REFERENCES sanson_collections(id),
     job_id             UUID,                              -- pg-boss reference
     source_file        VARCHAR(500),
     source_srid        INTEGER,
@@ -802,6 +802,6 @@ sanson/
 | Output formats      | CSV and GeoPackage in addition to GeoJSON                           |
 | Tile caching        | MVT tile caching for improved performance                           |
 | OGC API Tiles       | OGC API — Tiles standard conformance                                |
-| Layer groups        | Combine multiple layers in a single response                        |
+| Collection groups   | Combine multiple collections in a single response                   |
 | Webhooks            | External notification at the end of an ingestion job                |
 | Geo simplification  | Geometry simplification at import via mapshaper                     |

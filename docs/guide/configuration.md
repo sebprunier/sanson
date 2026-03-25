@@ -41,7 +41,7 @@ docker compose -f docker/compose.yml up -d
 The database is initialized automatically via `scripts/init.sql`, which creates:
 
 - `sanson_workspaces` — workspace metadata
-- `sanson_layers` — layer metadata (OGC collections)
+- `sanson_collections` — collection metadata (OGC collections)
 - `sanson_import_history` — import job tracking with progress and logs
 
 A `default` workspace is created at initialization.

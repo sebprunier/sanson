@@ -1,21 +1,21 @@
 import { useEffect, useState } from 'react'
 import { api } from '../services/api'
-import type { Workspace, Layer, HealthStatus } from '../services/api'
+import type { Workspace, Collection, HealthStatus } from '../services/api'
 
 export function Dashboard() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
-  const [layers, setLayers] = useState<Layer[]>([])
+  const [collections, setCollections] = useState<Collection[]>([])
   const [health, setHealth] = useState<HealthStatus | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     Promise.all([
       api.workspaces.list(),
-      api.layers.list(),
+      api.collections.list(),
       api.health().catch(() => ({ status: 'error', db: 'error' })),
-    ]).then(([ws, ly, h]) => {
+    ]).then(([ws, cols, h]) => {
       setWorkspaces(ws)
-      setLayers(ly)
+      setCollections(cols)
       setHealth(h)
       setLoading(false)
     })
@@ -23,7 +23,7 @@ export function Dashboard() {
 
   if (loading) return <LoadingSkeleton />
 
-  const totalFeatures = layers.reduce((sum, l) => sum + (l.feature_count ?? 0), 0)
+  const totalFeatures = collections.reduce((sum, c) => sum + (c.feature_count ?? 0), 0)
   const dbOk = health?.db === 'ok' || health?.db === 'connected'
 
   return (
@@ -32,7 +32,7 @@ export function Dashboard() {
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-5 mb-8">
         <StatCard label="Workspaces" value={workspaces.length} color="primary" />
-        <StatCard label="Layers" value={layers.length} color="primary" />
+        <StatCard label="Collections" value={collections.length} color="primary" />
         <StatCard label="Features" value={totalFeatures.toLocaleString()} color="primary" />
         <div className="bg-white rounded-lg border border-gray-200 p-5">
           <p className="text-sm text-gray-500 mb-1">Database</p>
@@ -45,9 +45,9 @@ export function Dashboard() {
         </div>
       </div>
 
-      <h2 className="text-lg font-semibold text-gray-900 mb-4">Recent layers</h2>
-      {layers.length === 0 ? (
-        <p className="text-gray-500">No layers yet. Import some data to get started.</p>
+      <h2 className="text-lg font-semibold text-gray-900 mb-4">Recent collections</h2>
+      {collections.length === 0 ? (
+        <p className="text-gray-500">No collections yet. Import some data to get started.</p>
       ) : (
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
           <table className="w-full text-sm">
@@ -60,17 +60,17 @@ export function Dashboard() {
               </tr>
             </thead>
             <tbody>
-              {layers.slice(0, 10).map((layer) => (
-                <tr key={layer.id} className="border-b border-gray-100 last:border-0">
-                  <td className="px-4 py-3 font-medium text-gray-900">{layer.name}</td>
-                  <td className="px-4 py-3 text-gray-600">{layer.workspace_name}</td>
+              {collections.slice(0, 10).map((col) => (
+                <tr key={col.id} className="border-b border-gray-100 last:border-0">
+                  <td className="px-4 py-3 font-medium text-gray-900">{col.name}</td>
+                  <td className="px-4 py-3 text-gray-600">{col.workspace_name}</td>
                   <td className="px-4 py-3">
                     <span className="inline-block bg-primary-50 text-primary-700 text-xs px-2 py-0.5 rounded">
-                      {layer.geometry_type ?? '—'}
+                      {col.geometry_type ?? '—'}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right text-gray-600">
-                    {layer.feature_count?.toLocaleString() ?? '—'}
+                    {col.feature_count?.toLocaleString() ?? '—'}
                   </td>
                 </tr>
               ))}

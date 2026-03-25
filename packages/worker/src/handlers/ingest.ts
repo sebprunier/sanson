@@ -48,7 +48,7 @@ export async function handleIngest(db: Pool, payload: IngestJobPayload): Promise
     return handleCsvIngest(db, payload)
   }
 
-  const { importHistoryId, filePath, workspaceId, layerName, srid, sourceFileName } = payload
+  const { importHistoryId, filePath, workspaceId, collectionName, srid, sourceFileName } = payload
 
   await updateProgress(db, importHistoryId, {
     status: 'running',
@@ -82,7 +82,7 @@ export async function handleIngest(db: Pool, payload: IngestJobPayload): Promise
   }))
 
   // Build table name
-  const tableName = `data_${sanitizeColumnName(layerName)}`
+  const tableName = `data_${sanitizeColumnName(collectionName)}`
 
   // Check if table already exists (re-import)
   const { rows: tableCheck } = await db.query(
@@ -163,35 +163,43 @@ export async function handleIngest(db: Pool, payload: IngestJobPayload): Promise
     }
   }
 
-  // Register or update layer
-  const { rows: existingLayer } = await db.query(
-    'SELECT id FROM sanson_layers WHERE workspace_id = $1 AND name = $2',
-    [workspaceId, layerName],
+  // Register or update collection
+  const { rows: existingCollection } = await db.query(
+    'SELECT id FROM sanson_collections WHERE workspace_id = $1 AND name = $2',
+    [workspaceId, collectionName],
   )
 
-  let layerId: string
-  if (existingLayer.length > 0) {
-    layerId = existingLayer[0].id
+  let collectionId: string
+  if (existingCollection.length > 0) {
+    collectionId = existingCollection[0].id
     await db.query(
-      `UPDATE sanson_layers
+      `UPDATE sanson_collections
        SET bbox = $2, feature_count = $3, geometry_type = $4, updated_at = now()
        WHERE id = $1`,
-      [layerId, JSON.stringify(bbox), insertedCount, geometryType],
+      [collectionId, JSON.stringify(bbox), insertedCount, geometryType],
     )
   } else {
-    const { rows: newLayer } = await db.query(
-      `INSERT INTO sanson_layers (workspace_id, name, table_name, geometry_column, id_column, srid, bbox, feature_count, geometry_type)
+    const { rows: newCollection } = await db.query(
+      `INSERT INTO sanson_collections (workspace_id, name, table_name, geometry_column, id_column, srid, bbox, feature_count, geometry_type)
        VALUES ($1, $2, $3, 'geom', 'id', $4, $5, $6, $7)
        RETURNING id`,
-      [workspaceId, layerName, tableName, srid, JSON.stringify(bbox), insertedCount, geometryType],
+      [
+        workspaceId,
+        collectionName,
+        tableName,
+        srid,
+        JSON.stringify(bbox),
+        insertedCount,
+        geometryType,
+      ],
     )
-    layerId = newLayer[0].id
+    collectionId = newCollection[0].id
   }
 
-  // Link layer to import history
-  await db.query('UPDATE sanson_import_history SET layer_id = $2 WHERE id = $1', [
+  // Link collection to import history
+  await db.query('UPDATE sanson_import_history SET collection_id = $2 WHERE id = $1', [
     importHistoryId,
-    layerId,
+    collectionId,
   ])
 
   // Compute duration

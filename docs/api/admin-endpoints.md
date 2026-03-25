@@ -46,34 +46,34 @@ PUT /api/admin/workspaces/{id}
 DELETE /api/admin/workspaces/{id}
 ```
 
-Deleting a workspace cascades to all its layers.
+Deleting a workspace cascades to all its collections.
 
-## Layers
+## Collections
 
-### List layers
+### List collections
 
 ```
-GET /api/admin/layers
+GET /api/admin/collections
 ```
 
 Supports filtering by workspace:
 
 ```
-GET /api/admin/layers?workspace_id={uuid}
+GET /api/admin/collections?workspace_id={uuid}
 ```
 
-### Get a layer
+### Get a collection
 
 ```
-GET /api/admin/layers/{id}
+GET /api/admin/collections/{id}
 ```
 
-Returns full layer metadata including bounding box, feature count, geometry type, and SRID.
+Returns full collection metadata including bounding box, feature count, geometry type, and SRID.
 
-### Update a layer
+### Update a collection
 
 ```
-PUT /api/admin/layers/{id}
+PUT /api/admin/collections/{id}
 ```
 
 All fields are optional — only provided fields are updated.
@@ -91,47 +91,47 @@ All fields are optional — only provided fields are updated.
 
 | Field             | Type           | Description                                                          |
 | ----------------- | -------------- | -------------------------------------------------------------------- |
-| `workspace_id`    | string         | Move the layer to a different workspace                              |
-| `name`            | string         | Rename the layer                                                     |
-| `description`     | string \| null | Layer description (set to `null` to clear)                           |
+| `workspace_id`    | string         | Move the collection to a different workspace                         |
+| `name`            | string         | Rename the collection                                                |
+| `description`     | string \| null | Collection description (set to `null` to clear)                      |
 | `attribution`     | string \| null | Data attribution text                                                |
 | `datetime_column` | string \| null | Column to use for OGC `?datetime=` temporal filtering                |
 | `exposed_fields`  | array \| null  | Columns to expose in the API (see [Exposed Fields](#exposed-fields)) |
 
-### Export layer data
+### Export collection data
 
 ```
-GET /api/admin/layers/{id}/export
+GET /api/admin/collections/{id}/export
 ```
 
-Downloads the full layer as a GeoJSON file. The response includes a `Content-Disposition` header for file download. If `exposed_fields` is configured, only those columns are included in the export.
+Downloads the full collection as a GeoJSON file. The response includes a `Content-Disposition` header for file download. If `exposed_fields` is configured, only those columns are included in the export.
 
-### Delete a layer
+### Delete a collection
 
 ```
-DELETE /api/admin/layers/{id}
+DELETE /api/admin/collections/{id}
 ```
 
-Deleting a layer:
+Deleting a collection:
 
 - Drops the associated PostGIS data table
 - Cascades to import history records
 
-### Layer schema
+### Collection schema
 
 ```
-GET /api/admin/layers/{id}/schema
+GET /api/admin/collections/{id}/schema
 ```
 
-Returns column names, types, and basic statistics (distinct values, nulls) for the layer's data table.
+Returns column names, types, and basic statistics (distinct values, nulls) for the collection's data table.
 
-### Layer import history
+### Collection import history
 
 ```
-GET /api/admin/layers/{id}/history
+GET /api/admin/collections/{id}/history
 ```
 
-Returns the import history for a specific layer, with progress and timing details.
+Returns the import history for a specific collection, with progress and timing details.
 
 ## Import
 
@@ -147,7 +147,7 @@ Multipart form data with the following fields:
 | -------------- | ------ | -------- | ------------------------------------------------------------------- |
 | `file`         | file   | Yes      | GeoJSON (`.geojson`, `.json`, `.geojson.gz`, `.gz`) or CSV (`.csv`) |
 | `workspace_id` | string | Yes      | Target workspace UUID                                               |
-| `layer_name`   | string | Yes      | Name for the new layer                                              |
+| `layer_name`   | string | Yes      | Name for the new collection                                         |
 | `srid`         | number | No       | Source SRID (default: 4326)                                         |
 | `separator`    | string | No       | CSV only — column separator (auto-detected if omitted)              |
 | `longitude`    | string | No       | CSV only — longitude column name (auto-detected if omitted)         |
@@ -171,12 +171,12 @@ Multipart form data with the following fields:
 GET /api/admin/jobs
 ```
 
-| Parameter  | Description                                                   |
-| ---------- | ------------------------------------------------------------- |
-| `status`   | Filter by status: `pending`, `running`, `completed`, `failed` |
-| `layer_id` | Filter by layer UUID                                          |
-| `limit`    | Number of results (default: 20)                               |
-| `offset`   | Pagination offset                                             |
+| Parameter       | Description                                                   |
+| --------------- | ------------------------------------------------------------- |
+| `status`        | Filter by status: `pending`, `running`, `completed`, `failed` |
+| `collection_id` | Filter by collection UUID                                     |
+| `limit`         | Number of results (default: 20)                               |
+| `offset`        | Pagination offset                                             |
 
 Returns jobs ordered by `created_at` descending.
 
@@ -228,7 +228,7 @@ Failed jobs are automatically retried up to 3 times by pg-boss, with a 30-second
 
 ## Exposed Fields
 
-By default, all columns from the data table are exposed in the OGC API (features, queryables, vector tiles, and export). You can restrict which columns are visible by configuring `exposed_fields` on a layer.
+By default, all columns from the data table are exposed in the OGC API (features, queryables, vector tiles, and export). You can restrict which columns are visible by configuring `exposed_fields` on a collection.
 
 ### Behavior
 
@@ -261,11 +261,11 @@ Exposed fields filtering applies to:
 - **Single feature** (`/collections/{id}/items/{fid}`) — same filtering
 - **Queryables** (`/collections/{id}/queryables`) — only exposed columns are listed as filterable
 - **Vector tiles** (`/collections/{id}/tiles/{z}/{x}/{y}.pbf`) — MVT properties reflect exposed fields
-- **Export** (`/api/admin/layers/{id}/export`) — GeoJSON export respects the configuration
+- **Export** (`/api/admin/collections/{id}/export`) — GeoJSON export respects the configuration
 
-## Layer Style
+## Collection Style
 
-Layers can have a style configuration that defines how features should be rendered. The style is stored as JSONB and supports three classification types.
+Collections can have a style configuration that defines how features should be rendered. The style is stored as JSONB and supports three classification types.
 
 ### Style types
 
@@ -313,12 +313,12 @@ Layers can have a style configuration that defines how features should be render
 }
 ```
 
-Save a style via the [Update a layer](#update-a-layer) endpoint (`PUT /api/admin/layers/{id}` with a `style` field). Set `style` to `null` to remove it.
+Save a style via the [Update a collection](#update-a-collection) endpoint (`PUT /api/admin/collections/{id}` with a `style` field). Set `style` to `null` to remove it.
 
 ### Auto-classify
 
 ```
-GET /api/admin/layers/{id}/classify
+GET /api/admin/collections/{id}/classify
 ```
 
 Generates classification suggestions from the actual data.
