@@ -12,6 +12,7 @@
     "build": "tsc"
   },
   "dependencies": {
+    "@sanson/core": "workspace:*",
     "pg": "^8.0.0",
     "pg-boss": "^10.0.0"
   },

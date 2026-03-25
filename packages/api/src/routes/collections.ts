@@ -1,8 +1,12 @@
 import { FastifyInstance, FastifyReply } from 'fastify'
 import { Pool } from 'pg'
-import { parseCql2Text } from '../cql2'
-import { parseCql2Json } from '../cql2-json'
-import { buildSupportedCrs, resolveOutputSrid, uriToSrid } from '../crs'
+import {
+  parseCql2Text,
+  parseCql2Json,
+  buildSupportedCrs,
+  resolveOutputSrid,
+  uriToSrid,
+} from '@sanson/core'
 
 interface CollectionsRouteOptions {
   db: Pool

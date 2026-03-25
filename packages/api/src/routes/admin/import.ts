@@ -12,10 +12,7 @@ interface ImportRouteOptions {
   boss?: PgBoss
 }
 
-interface GeoJsonFeatureCollection {
-  type: 'FeatureCollection'
-  features: Array<{ type: string }>
-}
+import type { GeoJsonFeatureCollection } from '@sanson/core'
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR ?? './uploads'
 const CSV_EXTENSIONS = ['.csv']

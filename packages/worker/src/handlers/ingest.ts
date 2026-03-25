@@ -4,34 +4,17 @@ import { IngestJobPayload } from '../boss'
 import { updateProgress } from '../utils/progress'
 import { handleCsvIngest } from './ingest-csv'
 import { handleShapefileIngest } from './ingest-shapefile'
+import { sanitizeColumnName } from '@sanson/core'
+import type { GeoJsonFeatureCollection } from '@sanson/core'
 
 const BATCH_SIZE = 500
 
-interface GeoJsonFeature {
-  type: 'Feature'
-  geometry: { type: string; coordinates: unknown }
-  properties: Record<string, unknown>
-}
-
-interface GeoJsonFeatureCollection {
-  type: 'FeatureCollection'
-  features: GeoJsonFeature[]
-}
-
-function inferSqlType(value: unknown): string {
+function inferGeoJsonSqlType(value: unknown): string {
   if (typeof value === 'number') {
     return Number.isInteger(value) ? 'INTEGER' : 'DOUBLE PRECISION'
   }
   if (typeof value === 'boolean') return 'BOOLEAN'
   return 'TEXT'
-}
-
-const RESERVED_COLUMNS = new Set(['id', 'geom'])
-
-function sanitizeColumnName(name: string): string {
-  let col = name.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase()
-  if (RESERVED_COLUMNS.has(col)) col = `_${col}`
-  return col
 }
 
 function toMultiType(geomType: string): string {
@@ -73,12 +56,12 @@ export async function handleIngest(db: Pool, payload: IngestJobPayload): Promise
 
   // Detect geometry type and columns from first feature
   // Always promote to Multi variant to handle mixed Polygon/MultiPolygon etc.
-  const geometryType = toMultiType(geojson.features[0].geometry.type)
+  const geometryType = toMultiType(geojson.features[0].geometry!.type)
   const firstProps = geojson.features[0].properties || {}
   const columns = Object.entries(firstProps).map(([key, value]) => ({
     name: sanitizeColumnName(key),
     originalName: key,
-    type: inferSqlType(value),
+    type: inferGeoJsonSqlType(value),
   }))
 
   // Build table name

@@ -13,6 +13,7 @@
   "dependencies": {
     "@fastify/multipart": "^9.4.0",
     "@fastify/swagger": "^9.7.0",
+    "@sanson/core": "workspace:*",
     "@sanson/worker": "workspace:*",
     "fastify": "^5.0.0",
     "pg": "^8.0.0",

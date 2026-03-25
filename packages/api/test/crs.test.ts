@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sridToUri, uriToSrid, buildSupportedCrs, resolveOutputSrid, CRS84_URI } from '../src/crs'
+import { sridToUri, uriToSrid, buildSupportedCrs, resolveOutputSrid, CRS84_URI } from '@sanson/core'
 
 describe('CRS utilities', () => {
   describe('sridToUri', () => {

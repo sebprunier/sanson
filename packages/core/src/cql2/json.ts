@@ -12,7 +12,7 @@
  * - Temporal: t_after, t_before, t_during, t_equals, t_intersects, t_disjoint
  */
 
-import type { CqlResult, CqlParseOptions } from './cql2'
+import type { CqlResult, CqlParseOptions } from './types'
 
 type CqlJsonExpr =
   | { op: string; args: unknown[] }

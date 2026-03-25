@@ -3,15 +3,16 @@ import { mkdirSync, createWriteStream, unlinkSync } from 'fs'
 import { join } from 'path'
 import { pipeline } from 'stream/promises'
 import { gunzipSync } from 'zlib'
-import { spawnProcess } from '../../utils/exec'
 import {
+  spawnProcess,
   stripBom,
   detectSeparator,
   parseCsvLine,
   autoDetectGeoColumns,
   inferSqlType,
   sanitizeColumnName,
-} from '../../utils/csv'
+} from '@sanson/core'
+import type { GeoJsonFeature, GeoJsonFeatureCollection } from '@sanson/core'
 
 interface PreviewResult {
   format: 'geojson' | 'csv' | 'shapefile'
@@ -30,17 +31,6 @@ interface PreviewResult {
     features: Array<object>
   } | null
   bbox: [number, number, number, number] | null
-}
-
-interface GeoJsonFeature {
-  type: string
-  geometry?: { type: string; coordinates: unknown }
-  properties?: Record<string, unknown>
-}
-
-interface GeoJsonFeatureCollection {
-  type: string
-  features: GeoJsonFeature[]
 }
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR ?? './uploads'

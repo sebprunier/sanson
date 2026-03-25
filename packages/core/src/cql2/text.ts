@@ -1,7 +1,7 @@
 /**
  * CQL2 Text parser — converts a CQL2 Text expression to a SQL WHERE clause.
  *
- * Supported V1 subset:
+ * Supported subset:
  * - Comparison: =, <>, <, <=, >, >=
  * - Logic: AND, OR, NOT
  * - Text: LIKE, ILIKE
@@ -13,10 +13,7 @@
  * - Temporal: T_AFTER, T_BEFORE, T_DURING, T_EQUALS, T_INTERSECTS, T_DISJOINT
  */
 
-export interface CqlResult {
-  sql: string
-  params: unknown[]
-}
+import type { CqlResult, CqlParseOptions } from './types'
 
 type Token =
   | { type: 'identifier'; value: string }
@@ -519,13 +516,6 @@ const spatialFuncMap: Record<string, string> = {
   S_OVERLAPS: 'ST_Overlaps',
   S_EQUALS: 'ST_Equals',
   S_DISJOINT: 'ST_Disjoint',
-}
-
-export interface CqlParseOptions {
-  startParamIndex: number
-  geometryColumn: string
-  srid: number
-  allowedColumns: Set<string>
 }
 
 export function parseCql2Text(expression: string, options: CqlParseOptions): CqlResult {

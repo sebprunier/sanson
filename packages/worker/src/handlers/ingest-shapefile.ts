@@ -2,7 +2,7 @@ import { unlinkSync } from 'fs'
 import { Pool } from 'pg'
 import { IngestJobPayload } from '../boss'
 import { updateProgress } from '../utils/progress'
-import { spawnProcess } from '../utils/exec'
+import { spawnProcess } from '@sanson/core'
 
 interface OgrLayerInfo {
   featureCount: number

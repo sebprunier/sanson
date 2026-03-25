@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseCql2Text } from '../src/cql2'
+import { parseCql2Text } from '@sanson/core'
 
 const defaultOptions = {
   startParamIndex: 1,

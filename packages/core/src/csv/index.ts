@@ -1,6 +1,3 @@
-// TODO: move to @sanson/core when that package is created
-// Duplicated from packages/worker/src/handlers/ingest-csv.ts
-
 const RESERVED_COLUMNS = new Set(['id', 'geom'])
 
 export function sanitizeColumnName(name: string): string {

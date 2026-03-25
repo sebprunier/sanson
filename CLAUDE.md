@@ -25,6 +25,7 @@ Full specifications are in [`SPECS.md`](./SPECS.md). Read it before making signi
 ## Monorepo layout
 
 ```
+packages/core/    Shared types (GeoJSON, CQL2, CRS), CSV/process utilities
 packages/api/     Fastify server — OGC API + admin routes
 packages/worker/  pg-boss job queue + async ingestion workers
 apps/admin/       React + Tailwind CSS + MapLibre GL admin UI
@@ -32,8 +33,6 @@ docker/           Docker Compose for local PostgreSQL + PostGIS
 scripts/          SQL init scripts
 data/             Test datasets (GeoJSON, Shapefile)
 ```
-
-Planned but not yet created: `packages/core/` (shared types, CQL2 parser).
 
 ## Running things
 
@@ -85,17 +84,17 @@ pnpm --filter @sanson/admin e2e:headed      # same, with visible browser
 - **pg-boss job queue** — PostgreSQL-based async workers via pg-boss v10. `NODE_MODE` env var controls startup: `api` (HTTP only), `worker` (pg-boss only), `all` (both, default). Requires explicit `createQueue()` before `send()`/`work()`. Worker handler receives an array: `async ([job]) =>`.
 - **Geometry type promotion** — always promotes to Multi variant (`MultiPolygon`, `MultiLineString`, etc.) via `toMultiType()` and wraps inserts with `ST_Multi()` to handle mixed single/multi geometries in the same GeoJSON file.
 - **Collection deletion** — `sanson_import_history.collection_id` FK uses `ON DELETE CASCADE`. DELETE handler also drops the associated `data_*` PostGIS table.
-- **CQL2 Text parser** — recursive descent parser in `packages/api/src/cql2.ts`, outputs parameterized SQL. Validates column names against `information_schema.columns`. Supports: comparison, logic (AND/OR/NOT), text (LIKE/ILIKE/NOT LIKE/NOT ILIKE), null (IS NULL/IS NOT NULL), list (IN/NOT IN), range (BETWEEN/NOT BETWEEN), and all CQL2 spatial functions (S_INTERSECTS, S_WITHIN, S_CONTAINS, S_TOUCHES, S_CROSSES, S_OVERLAPS, S_EQUALS, S_DISJOINT).
+- **CQL2 Text parser** — recursive descent parser in `packages/core/src/cql2/text.ts`, outputs parameterized SQL. Validates column names against `information_schema.columns`. Supports: comparison, logic (AND/OR/NOT), text (LIKE/ILIKE/NOT LIKE/NOT ILIKE), null (IS NULL/IS NOT NULL), list (IN/NOT IN), range (BETWEEN/NOT BETWEEN), and all CQL2 spatial functions (S_INTERSECTS, S_WITHIN, S_CONTAINS, S_TOUCHES, S_CROSSES, S_OVERLAPS, S_EQUALS, S_DISJOINT).
 - **OGC datetime filter** — `?datetime=` supports instant, interval, and open-ended bounds (`..`). Requires `datetime_column` to be configured on the collection.
 - **Lat/lon/radius shortcuts** — non-standard convenience params: `?lat=&lon=` for point intersection, `?lat=&lon=&radius=` for radius search (meters, via `::geography` cast). Combinable with all other filters.
 - **OGC pagination** — `first`/`last`/`next`/`prev` links in body + `Link` header + `X-Total-Count`. All query params (bbox, datetime, lat/lon/radius, filter) are preserved in pagination links.
 - **Vector tiles (MVT)** — `GET /collections/:id/tiles/:z/:x/:y.pbf`. Uses `ST_AsMVT` + `ST_AsMVTGeom` with extent=4096, buffer=256. Properties cast to text. Returns `application/vnd.mapbox-vector-tile` with 1h cache. Empty tiles return 204.
 - **Exposed fields** — `exposed_fields` JSONB column on `sanson_collections`. When null, all columns are exposed (backward compatible). When set, only listed columns appear in features, queryables, MVT tiles, and export. Each entry has `source` and optional `alias`. Uses `jsonb_build_object()` for selective property building. Helper functions: `buildPropertiesExpr()` for SQL property expression, `getExposedColumns()` for queryables and MVT.
 - **Collection style / legend** — `style` JSONB column on `sanson_collections`. Three types: `single` (one color), `categorized` (unique values → colors via MapLibre `match`), `graduated` (numeric ranges → colors via MapLibre `step` with `to-number`). Auto-classification endpoint `GET /api/admin/collections/:id/classify` computes distinct values or quantile breakpoints from PostgreSQL. OGC endpoint `GET /collections/:id/style` exposes the config. Frontend converts style config to MapLibre paint expressions; legend is a DOM overlay.
-- **Import preview** — `POST /api/admin/import/preview` analyzes a file (GeoJSON, CSV, Shapefile) without importing. Returns metadata (format, feature count, geometry type, SRID), sample rows (first 5), sample GeoJSON (first 100 features), and bounding box. CSV preview auto-detects separator and geo columns. Shapefile preview uses `ogrinfo`/`ogr2ogr` (GDAL). Route in `packages/api/src/routes/admin/preview.ts`, registered without `db`/`boss` (pure file parsing). CSV utilities duplicated from worker in `packages/api/src/utils/csv.ts`, `spawnProcess` in `packages/api/src/utils/exec.ts`.
+- **Import preview** — `POST /api/admin/import/preview` analyzes a file (GeoJSON, CSV, Shapefile) without importing. Returns metadata (format, feature count, geometry type, SRID), sample rows (first 5), sample GeoJSON (first 100 features), and bounding box. CSV preview auto-detects separator and geo columns. Shapefile preview uses `ogrinfo`/`ogr2ogr` (GDAL). Route in `packages/api/src/routes/admin/preview.ts`, registered without `db`/`boss` (pure file parsing). CSV and process utilities imported from `@sanson/core`.
 - **GeoJSON export** — `GET /api/admin/collections/:id/export`. Streams full collection as GeoJSON FeatureCollection with `Content-Disposition` header. Respects `exposed_fields` filtering.
 - **Dynamic collection update** — PUT handler uses dynamic SET clause builder (`addField()`) that only includes provided fields, avoiding null/undefined ambiguity for nullable columns (description, attribution, datetime_column, exposed_fields, style).
-- **CRS by Reference** — `?crs=` param on items/feature endpoints for output reprojection, `?bbox-crs=` for bbox coordinate system. `Content-Crs` response header. Supported CRS per collection: CRS84, EPSG:4326, EPSG:3857, EPSG:2154, plus the collection's native SRID. CRS utilities in `packages/api/src/crs.ts`.
+- **CRS by Reference** — `?crs=` param on items/feature endpoints for output reprojection, `?bbox-crs=` for bbox coordinate system. `Content-Crs` response header. Supported CRS per collection: CRS84, EPSG:4326, EPSG:3857, EPSG:2154, plus the collection's native SRID. CRS utilities in `packages/core/src/crs/index.ts`.
 - **WGS84 (EPSG:4326) by default** for API output
 - **Table prefix `sanson_`** for metadata tables (workspaces, collections, import history) — no dedicated schema for now, revisit later if needed
 - **Vite proxy** — admin UI dev server on port 5173 proxies `/api`, `/collections`, `/conformance`, `/health` to API on port 3000
@@ -105,7 +104,6 @@ pnpm --filter @sanson/admin e2e:headed      # same, with visible browser
 ### 1. Quick wins
 
 - Docker build for production deployment
-- `packages/core/` extraction (shared types, CQL2 parser)
 
 ### 2. OGC CITE validation
 
