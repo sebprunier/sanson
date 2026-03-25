@@ -1,19 +1,27 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { api } from '../services/api'
-import type { Workspace } from '../services/api'
+import type { Workspace, Collection } from '../services/api'
 
 export function Workspaces() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
+  const [collections, setCollections] = useState<Collection[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
 
   const load = () => {
-    api.workspaces.list().then((ws) => {
+    Promise.all([api.workspaces.list(), api.collections.list()]).then(([ws, cols]) => {
       setWorkspaces(ws)
+      setCollections(cols)
       setLoading(false)
     })
   }
+
+  const collectionCountByWorkspace = collections.reduce<Record<string, number>>((acc, col) => {
+    acc[col.workspace_id] = (acc[col.workspace_id] ?? 0) + 1
+    return acc
+  }, {})
 
   useEffect(load, [])
 
@@ -69,6 +77,7 @@ export function Workspaces() {
               <tr className="border-b border-gray-200 bg-gray-50">
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Name</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Description</th>
+                <th className="text-right px-4 py-3 font-medium text-gray-600">Collections</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Created</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">Actions</th>
               </tr>
@@ -78,6 +87,14 @@ export function Workspaces() {
                 <tr key={ws.id} className="border-b border-gray-100 last:border-0">
                   <td className="px-4 py-3 font-medium text-gray-900">{ws.name}</td>
                   <td className="px-4 py-3 text-gray-600">{ws.description || '—'}</td>
+                  <td className="px-4 py-3 text-right">
+                    <Link
+                      to={`/collections?workspace=${ws.id}`}
+                      className="text-primary-700 hover:text-primary-900 font-medium"
+                    >
+                      {collectionCountByWorkspace[ws.id] ?? 0}
+                    </Link>
+                  </td>
                   <td className="px-4 py-3 text-gray-500">
                     {new Date(ws.created_at).toLocaleDateString()}
                   </td>
