@@ -41,7 +41,7 @@ nvm use                                     # Node 24
 pnpm install                                # install deps
 docker compose -f docker/compose.yml up -d  # start DB (port 5433)
 pnpm dev                                    # API dev server (port 3000)
-pnpm --filter @sanson/admin dev             # admin UI dev server (port 5173)
+pnpm --filter @sanson/admin dev             # admin UI dev server (port 5173, at /admin/)
 pnpm test                                   # run all tests (API unit + integration)
 pnpm --filter @sanson/api test              # run api tests only
 pnpm --filter @sanson/admin e2e             # run E2E tests (needs API + UI running)
@@ -97,6 +97,7 @@ pnpm --filter @sanson/admin e2e:headed      # same, with visible browser
 - **CRS by Reference** — `?crs=` param on items/feature endpoints for output reprojection, `?bbox-crs=` for bbox coordinate system. `Content-Crs` response header. Supported CRS per collection: CRS84, EPSG:4326, EPSG:3857, EPSG:2154, plus the collection's native SRID. CRS utilities in `packages/core/src/crs/index.ts`.
 - **WGS84 (EPSG:4326) by default** for API output
 - **Table prefix `sanson_`** for metadata tables (workspaces, collections, import history) — no dedicated schema for now, revisit later if needed
+- **Admin UI base path** — admin UI is served under `/admin/` (Vite `base: '/admin/'`, React Router `basename="/admin"`). This avoids URL collisions with OGC API endpoints at the root (`/collections`, `/conformance`). Assets use `import.meta.env.BASE_URL` for correct path resolution.
 - **Vite proxy** — admin UI dev server on port 5173 proxies `/api`, `/collections`, `/conformance`, `/health` to API on port 3000
 
 ## Roadmap / next steps

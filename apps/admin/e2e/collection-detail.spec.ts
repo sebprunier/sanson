@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test'
 test.describe('Collection Detail', () => {
   // Navigate to the first collection detail from the collections list
   async function goToCollectionDetail(page: import('@playwright/test').Page) {
-    await page.goto('/collections')
+    await page.goto('/admin/collections')
     await expect(page.getByRole('heading', { name: 'Collections' })).toBeVisible()
     // Wait for table to load and click first collection link
     const firstLink = page.locator('table a').first()

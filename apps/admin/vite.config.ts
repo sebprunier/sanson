@@ -4,13 +4,14 @@ import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  base: '/admin/',
   server: {
     port: 5173,
     proxy: {
-      '/api': 'http://localhost:3000',
       '/collections': 'http://localhost:3000',
       '/conformance': 'http://localhost:3000',
       '/health': 'http://localhost:3000',
+      '/api': 'http://localhost:3000',
     },
   },
 })

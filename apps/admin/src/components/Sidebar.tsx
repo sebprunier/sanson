@@ -12,7 +12,7 @@ export function Sidebar() {
   return (
     <aside className="w-64 bg-primary-800 text-white flex flex-col min-h-screen">
       <div className="flex items-center gap-3 px-5 py-5 border-b border-primary-700">
-        <img src="/logo.png" alt="Sanson" className="w-9 h-9 rounded" />
+        <img src={`${import.meta.env.BASE_URL}logo.png`} alt="Sanson" className="w-9 h-9 rounded" />
         <span className="text-lg font-semibold tracking-tight">Sanson</span>
       </div>
       <nav className="flex-1 py-4">

@@ -2,13 +2,13 @@ import { test, expect } from '@playwright/test'
 
 test.describe('Workspaces', () => {
   test('lists default workspace', async ({ page }) => {
-    await page.goto('/workspaces')
+    await page.goto('/admin/workspaces')
     await expect(page.getByRole('heading', { name: 'Workspaces' })).toBeVisible()
     await expect(page.getByRole('cell', { name: 'default', exact: true })).toBeVisible()
   })
 
   test('create, edit, and delete a workspace', async ({ page }) => {
-    await page.goto('/workspaces')
+    await page.goto('/admin/workspaces')
 
     // Create
     await page.getByRole('button', { name: 'New workspace' }).click()
@@ -32,7 +32,7 @@ test.describe('Workspaces', () => {
   })
 
   test('default workspace cannot be deleted', async ({ page }) => {
-    await page.goto('/workspaces')
+    await page.goto('/admin/workspaces')
     const defaultRow = page.getByRole('row').filter({ hasText: /^default/ })
     await expect(defaultRow.getByRole('button', { name: 'Delete' })).not.toBeVisible()
   })

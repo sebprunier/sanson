@@ -6,7 +6,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 test.describe('Import', () => {
   test('shows import form with all fields', async ({ page }) => {
-    await page.goto('/import')
+    await page.goto('/admin/import')
     await expect(page.getByRole('heading', { name: 'Import data' })).toBeVisible()
     await expect(page.locator('input[type="file"]')).toBeVisible()
     await expect(page.locator('select')).toBeVisible()
@@ -16,7 +16,7 @@ test.describe('Import', () => {
   })
 
   test('auto-fills collection name from file name', async ({ page }) => {
-    await page.goto('/import')
+    await page.goto('/admin/import')
     const fileInput = page.locator('input[type="file"]')
     const geojsonPath = path.resolve(
       __dirname,

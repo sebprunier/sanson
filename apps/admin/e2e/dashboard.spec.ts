@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test'
 
 test.describe('Dashboard', () => {
   test('displays stats and database status', async ({ page }) => {
-    await page.goto('/')
+    await page.goto('/admin')
     await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
 
     // Database status
@@ -17,7 +17,7 @@ test.describe('Dashboard', () => {
   })
 
   test('shows recent collections table', async ({ page }) => {
-    await page.goto('/')
+    await page.goto('/admin')
     await expect(page.getByRole('heading', { name: 'Recent collections' })).toBeVisible()
   })
 })

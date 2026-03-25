@@ -57,10 +57,10 @@ export function CollectionDetail() {
   return (
     <div>
       <button
-        onClick={() => navigate('/layers')}
+        onClick={() => navigate('/collections')}
         className="text-sm text-primary-600 hover:text-primary-800 mb-4 block"
       >
-        &larr; Back to layers
+        &larr; Back to collections
       </button>
 
       <div className="flex items-center justify-between mb-4">

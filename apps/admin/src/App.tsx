@@ -9,7 +9,7 @@ import { ApiExplorer } from './pages/ApiExplorer'
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/admin">
       <Routes>
         <Route element={<Layout />}>
           <Route index element={<Dashboard />} />
