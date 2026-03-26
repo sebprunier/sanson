@@ -480,12 +480,12 @@ function TableView({ collectionId }: { collectionId: string }) {
 
   return (
     <div>
-      <form onSubmit={handleFilterSubmit} className="flex gap-2 mb-3">
+      <form onSubmit={handleFilterSubmit} className="flex gap-2 mb-1">
         <input
           type="text"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          placeholder="CQL2 filter, e.g. departement='GIRONDE'"
+          placeholder="CQL2 filter, e.g. name='Paris'"
           className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
         />
         <button
@@ -517,6 +517,20 @@ function TableView({ collectionId }: { collectionId: string }) {
           </button>
         )}
       </form>
+      <p className="text-xs text-gray-400 mb-3">
+        Uses{' '}
+        <a
+          href="https://docs.ogc.org/is/21-065r2/21-065r2.html"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-primary-500 hover:underline"
+        >
+          CQL2
+        </a>{' '}
+        syntax — e.g. <code className="bg-gray-100 px-1 rounded text-xs">name LIKE 'Paris%'</code>,{' '}
+        <code className="bg-gray-100 px-1 rounded text-xs">population &gt; 10000</code>,{' '}
+        <code className="bg-gray-100 px-1 rounded text-xs">status IN ('active','pending')</code>
+      </p>
       {filterError && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-2 text-sm text-red-700 mb-3">
           {filterError}
@@ -1672,9 +1686,21 @@ function ExportView({ collection }: { collection: Collection }) {
               type="text"
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
-              placeholder="e.g. departement='GIRONDE'"
+              placeholder="e.g. name='Paris'"
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
+            <p className="text-xs text-gray-400 mt-1">
+              <a
+                href="https://docs.ogc.org/is/21-065r2/21-065r2.html"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary-500 hover:underline"
+              >
+                CQL2 documentation
+              </a>{' '}
+              — e.g. <code className="bg-gray-100 px-1 rounded">name='Paris'</code>,{' '}
+              <code className="bg-gray-100 px-1 rounded">population &gt; 10000</code>
+            </p>
           </div>
           <div>
             <label htmlFor="export-bbox" className="block text-sm font-medium text-gray-700 mb-1">
@@ -1790,6 +1816,7 @@ function ApiView({ collection, collectionId }: { collection: Collection; collect
 
   const sections: Array<{
     title: string
+    note?: React.ReactNode
     items: Array<{ label: string; description: string; curl: string }>
   }> = [
     {
@@ -1834,6 +1861,21 @@ function ApiView({ collection, collectionId }: { collection: Collection; collect
     },
     {
       title: 'Filtering',
+      note: (
+        <>
+          Supports{' '}
+          <a
+            href="https://docs.ogc.org/is/21-065r2/21-065r2.html"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary-500 hover:underline"
+          >
+            OGC CQL2
+          </a>{' '}
+          for text and JSON filter expressions, plus spatial shortcuts (point intersection, radius
+          search).
+        </>
+      ),
       items: [
         {
           label: 'CQL2 Text filter',
@@ -1961,6 +2003,7 @@ function ApiView({ collection, collectionId }: { collection: Collection; collect
           <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
             {section.title}
           </h3>
+          {section.note && <p className="text-xs text-gray-400 mb-3">{section.note}</p>}
           <div className="space-y-3">
             {section.items.map((item) => (
               <CurlBlock key={item.label} {...item} />
