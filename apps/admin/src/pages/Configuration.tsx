@@ -128,8 +128,8 @@ export function Configuration() {
             </h2>
             <div className="space-y-4">
               {group.items.map((entry) => (
-                <div key={entry.key} className="flex items-start gap-4">
-                  <div className="flex-1 min-w-0">
+                <div key={entry.key} className="flex items-center justify-between gap-4 max-w-lg">
+                  <div>
                     <label htmlFor={entry.key} className="block text-sm font-medium text-gray-900">
                       {entry.label}
                       {entry.restart && (
