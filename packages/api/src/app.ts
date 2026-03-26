@@ -12,6 +12,7 @@ import { adminCollectionsRoutes } from './routes/admin/collections'
 import { adminImportRoutes } from './routes/admin/import'
 import { adminPreviewRoutes } from './routes/admin/preview'
 import { adminJobsRoutes } from './routes/admin/jobs'
+import { adminHealthRoutes } from './routes/admin/health'
 import { healthRoutes } from './routes/health'
 import { tileMatrixSetsRoutes } from './routes/tileMatrixSets'
 
@@ -54,6 +55,7 @@ export function buildApp(db: Pool, options: AppOptions = {}): FastifyInstance {
   app.register(adminJobsRoutes, { db })
   app.register(apiRoutes)
   app.register(healthRoutes, { db })
+  app.register(adminHealthRoutes, { db })
 
   return app
 }

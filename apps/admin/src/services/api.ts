@@ -69,6 +69,44 @@ export interface HealthStatus {
   db: string
 }
 
+export interface DetailedHealth {
+  server: {
+    version: string
+    node_version: string
+    node_mode: string
+    uptime_seconds: number
+    memory: {
+      rss_mb: number
+      heap_used_mb: number
+      heap_total_mb: number
+    }
+  }
+  database: {
+    status: string
+    postgresql_version?: string
+    postgis_version?: string
+    database_size?: string
+    connections?: { active: number; max: number }
+    error?: string
+  }
+  jobs: {
+    pending: number
+    running: number
+    completed: number
+    failed: number
+    last_completed: {
+      source_file: string
+      status: string
+      duration_ms: number | null
+      completed_at: string
+    } | null
+  }
+  gdal: {
+    available: boolean
+    version: string | null
+  }
+}
+
 export interface ColumnSchema {
   column: string
   type: string
@@ -264,4 +302,6 @@ export const api = {
     },
     get: (id: string) => request<JobStatus>(`/api/admin/jobs/${id}`),
   },
+
+  detailedHealth: () => request<DetailedHealth>('/api/admin/health'),
 }
