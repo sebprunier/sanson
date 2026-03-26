@@ -1,5 +1,6 @@
 import { FastifyInstance, FastifyReply } from 'fastify'
 import { Pool } from 'pg'
+import { getConfigNumber } from '../config'
 import {
   parseCql2Text,
   parseCql2Json,
@@ -1018,7 +1019,8 @@ export async function collectionsRoutes(
       const mvt = rows[0]?.mvt
 
       reply.header('Content-Type', 'application/vnd.mapbox-vector-tile')
-      reply.header('Cache-Control', 'public, max-age=3600')
+      const cacheTtl = await getConfigNumber(options.db, 'tiles.cache_ttl_seconds')
+      reply.header('Cache-Control', `public, max-age=${cacheTtl}`)
 
       if (!mvt || mvt.length === 0) {
         // Empty tile — return 204

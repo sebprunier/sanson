@@ -40,6 +40,29 @@ INSERT INTO sanson_workspaces (name, description)
 VALUES ('default', 'Default workspace')
 ON CONFLICT DO NOTHING;
 
+-- Configuration (key/value settings, editable from admin UI)
+CREATE TABLE IF NOT EXISTS sanson_config (
+    key         VARCHAR(100) PRIMARY KEY,
+    value       TEXT NOT NULL,
+    category    VARCHAR(50) NOT NULL,
+    label       VARCHAR(200) NOT NULL,
+    description TEXT,
+    restart     BOOLEAN DEFAULT false,
+    updated_at  TIMESTAMPTZ DEFAULT now()
+);
+
+INSERT INTO sanson_config (key, value, category, label, description, restart) VALUES
+  ('upload.max_file_size_mb',    '1024',  'upload',  'Max file size (MB)',              'Maximum upload file size in megabytes',                          true),
+  ('import.batch_size',          '500',   'import',  'Batch size',                      'Number of features inserted per batch during import',            false),
+  ('import.csv_inference_rows',  '100',   'import',  'CSV type inference rows',         'Number of rows sampled to infer column types for CSV imports',   false),
+  ('import.default_srid',        '4326',  'import',  'Default SRID',                    'Default coordinate reference system for imports',                false),
+  ('jobs.retry_limit',           '3',     'jobs',    'Retry limit',                     'Maximum number of retries for failed jobs',                      true),
+  ('jobs.retry_delay_seconds',   '30',    'jobs',    'Retry delay (seconds)',            'Delay between job retries in seconds',                           true),
+  ('jobs.expire_hours',          '2',     'jobs',    'Expiration (hours)',               'Time before a running job is considered expired',                true),
+  ('jobs.archive_days',          '7',     'jobs',    'Archive after (days)',             'Number of days before completed jobs are archived',              true),
+  ('tiles.cache_ttl_seconds',    '3600',  'tiles',   'Cache TTL (seconds)',             'Cache-Control max-age for vector tiles',                         false)
+ON CONFLICT DO NOTHING;
+
 -- Import history (also serves as job tracking table)
 CREATE TABLE IF NOT EXISTS sanson_import_history (
     id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),

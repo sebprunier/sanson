@@ -107,6 +107,16 @@ export interface DetailedHealth {
   }
 }
 
+export interface ConfigEntry {
+  key: string
+  value: string
+  category: string
+  label: string
+  description: string | null
+  restart: boolean
+  updated_at: string
+}
+
 export interface ColumnSchema {
   column: string
   type: string
@@ -304,4 +314,14 @@ export const api = {
   },
 
   detailedHealth: () => request<DetailedHealth>('/api/admin/health'),
+
+  config: {
+    list: () => request<ConfigEntry[]>('/api/admin/config'),
+    update: (updates: Array<{ key: string; value: string }>) =>
+      request<ConfigEntry[]>('/api/admin/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      }),
+  },
 }

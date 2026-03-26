@@ -11,7 +11,13 @@ import {
   parseCsvLine,
 } from '@sanson/core'
 
-const BATCH_SIZE = 500
+async function getConfigNumber(db: Pool, key: string, fallback: number): Promise<number> {
+  const { rows } = await db.query<{ value: string }>(
+    'SELECT value FROM sanson_config WHERE key = $1',
+    [key],
+  )
+  return rows[0] ? parseInt(rows[0].value, 10) : fallback
+}
 
 export async function handleCsvIngest(db: Pool, payload: IngestJobPayload): Promise<void> {
   const {
@@ -23,6 +29,8 @@ export async function handleCsvIngest(db: Pool, payload: IngestJobPayload): Prom
     sourceFileName,
     csvOptions,
   } = payload
+  const batchSize = await getConfigNumber(db, 'import.batch_size', 500)
+  const inferenceRows = await getConfigNumber(db, 'import.csv_inference_rows', 100)
 
   await updateProgress(db, importHistoryId, {
     status: 'running',
@@ -98,8 +106,7 @@ export async function handleCsvIngest(db: Pool, payload: IngestJobPayload): Prom
     }
   }
 
-  // Infer column types from first 100 rows
-  const sampleSize = Math.min(100, dataRows.length)
+  const sampleSize = Math.min(inferenceRows, dataRows.length)
   const columns = propHeaders.map((header, ci) => {
     const sampleValues = dataRows.slice(0, sampleSize).map((row) => row[propIndices[ci]] ?? '')
     return {
@@ -168,7 +175,7 @@ export async function handleCsvIngest(db: Pool, payload: IngestJobPayload): Prom
     )
     insertedCount++
 
-    if (insertedCount % BATCH_SIZE === 0 || insertedCount + skippedCount === totalFeatures) {
+    if (insertedCount % batchSize === 0 || insertedCount + skippedCount === totalFeatures) {
       const progress = Math.round(((insertedCount + skippedCount) / totalFeatures) * 100)
       await updateProgress(db, importHistoryId, {
         progress,

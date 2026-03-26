@@ -25,6 +25,14 @@ test.describe('Navigation', () => {
     await sidebar.getByRole('link', { name: 'API Explorer' }).click()
     await expect(page.locator('.scalar-app').first()).toBeVisible()
 
+    // Navigate to Configuration
+    await sidebar.getByRole('link', { name: 'Configuration' }).click()
+    await expect(page.getByRole('heading', { name: 'Configuration' })).toBeVisible()
+
+    // Navigate to Health
+    await sidebar.getByRole('link', { name: 'Health' }).click()
+    await expect(page.getByRole('heading', { name: 'Health' })).toBeVisible()
+
     // Back to Dashboard
     await sidebar.getByRole('link', { name: 'Dashboard' }).click()
     await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()

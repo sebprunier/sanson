@@ -5,7 +5,7 @@ import { handleIngest } from './handlers/ingest'
 import { updateProgress } from './utils/progress'
 
 export { createBoss, QUEUE_INGEST } from './boss'
-export type { IngestJobPayload } from './boss'
+export type { IngestJobPayload, BossConfig } from './boss'
 
 export async function ensureQueues(boss: PgBoss): Promise<void> {
   await boss.createQueue(QUEUE_INGEST)

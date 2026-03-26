@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify'
 import { Pool } from 'pg'
+import { getConfigNumber } from '../../config'
 import { writeFileSync, mkdirSync, createWriteStream } from 'fs'
 import { join } from 'path'
 import { pipeline } from 'stream/promises'
@@ -36,7 +37,7 @@ export async function adminImportRoutes(
 
       let workspaceId: string | undefined
       let collectionName: string | undefined
-      let srid = 4326
+      let srid = await getConfigNumber(options.db, 'import.default_srid')
       let separator: string | undefined
       let longitudeColumn: string | undefined
       let latitudeColumn: string | undefined

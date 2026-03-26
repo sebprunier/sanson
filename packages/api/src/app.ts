@@ -13,12 +13,14 @@ import { adminImportRoutes } from './routes/admin/import'
 import { adminPreviewRoutes } from './routes/admin/preview'
 import { adminJobsRoutes } from './routes/admin/jobs'
 import { adminHealthRoutes } from './routes/admin/health'
+import { adminConfigRoutes } from './routes/admin/config'
 import { healthRoutes } from './routes/health'
 import { tileMatrixSetsRoutes } from './routes/tileMatrixSets'
 
 interface AppOptions {
   logger?: boolean
   boss?: PgBoss
+  maxFileSizeMb?: number
 }
 
 export function buildApp(db: Pool, options: AppOptions = {}): FastifyInstance {
@@ -38,7 +40,8 @@ export function buildApp(db: Pool, options: AppOptions = {}): FastifyInstance {
     },
   })
 
-  app.register(multipart, { limits: { fileSize: 1024 * 1024 * 1024 } }) // 1GB max
+  const maxFileSizeBytes = (options.maxFileSizeMb ?? 1024) * 1024 * 1024
+  app.register(multipart, { limits: { fileSize: maxFileSizeBytes } })
 
   app.addHook('onClose', async () => {
     await db.end()
@@ -56,6 +59,7 @@ export function buildApp(db: Pool, options: AppOptions = {}): FastifyInstance {
   app.register(apiRoutes)
   app.register(healthRoutes, { db })
   app.register(adminHealthRoutes, { db })
+  app.register(adminConfigRoutes, { db })
 
   return app
 }

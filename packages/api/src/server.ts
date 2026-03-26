@@ -1,6 +1,7 @@
 import { Pool } from 'pg'
 import { buildApp } from './app'
 import { createBoss, startWorker, ensureQueues } from '@sanson/worker'
+import type { BossConfig } from '@sanson/worker'
 
 const connectionString = process.env.DATABASE_URL
 if (!connectionString) {
@@ -17,7 +18,46 @@ if (!['api', 'worker', 'all'].includes(nodeMode)) {
 }
 
 const db = new Pool({ connectionString })
-const boss = createBoss(connectionString)
+
+// Load job queue config from database (falls back to defaults if table does not exist yet)
+async function loadBossConfig(): Promise<BossConfig> {
+  try {
+    const { rows } = await db.query<{ key: string; value: string }>(
+      "SELECT key, value FROM sanson_config WHERE key LIKE 'jobs.%'",
+    )
+    const map = new Map(rows.map((r) => [r.key, r.value]))
+    return {
+      retryLimit: map.has('jobs.retry_limit')
+        ? parseInt(map.get('jobs.retry_limit')!, 10)
+        : undefined,
+      retryDelay: map.has('jobs.retry_delay_seconds')
+        ? parseInt(map.get('jobs.retry_delay_seconds')!, 10)
+        : undefined,
+      expireInHours: map.has('jobs.expire_hours')
+        ? parseInt(map.get('jobs.expire_hours')!, 10)
+        : undefined,
+      archiveCompletedAfterSeconds: map.has('jobs.archive_days')
+        ? parseInt(map.get('jobs.archive_days')!, 10) * 24 * 60 * 60
+        : undefined,
+    }
+  } catch {
+    return {}
+  }
+}
+
+const bossConfig = await loadBossConfig()
+const boss = createBoss(connectionString, bossConfig)
+
+// Load upload config
+let maxFileSizeMb: number | undefined
+try {
+  const { rows } = await db.query<{ value: string }>(
+    "SELECT value FROM sanson_config WHERE key = 'upload.max_file_size_mb'",
+  )
+  if (rows[0]) maxFileSizeMb = parseInt(rows[0].value, 10)
+} catch {
+  // table may not exist yet
+}
 
 const shutdown = async () => {
   await boss.stop({ graceful: true })
@@ -34,7 +74,7 @@ try {
   console.log(`pg-boss started (schema: pgboss)`)
 
   if (nodeMode === 'api' || nodeMode === 'all') {
-    const app = buildApp(db, { logger: true, boss })
+    const app = buildApp(db, { logger: true, boss, maxFileSizeMb })
     app.addHook('onClose', async () => {
       await boss.stop({ graceful: true })
     })

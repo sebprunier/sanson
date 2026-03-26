@@ -1,13 +1,20 @@
 import PgBoss from 'pg-boss'
 
-export function createBoss(connectionString: string): PgBoss {
+export interface BossConfig {
+  retryLimit?: number
+  retryDelay?: number
+  expireInHours?: number
+  archiveCompletedAfterSeconds?: number
+}
+
+export function createBoss(connectionString: string, config: BossConfig = {}): PgBoss {
   return new PgBoss({
     connectionString,
     schema: 'pgboss',
-    retryLimit: 3,
-    retryDelay: 30,
-    expireInHours: 2,
-    archiveCompletedAfterSeconds: 7 * 24 * 60 * 60,
+    retryLimit: config.retryLimit ?? 3,
+    retryDelay: config.retryDelay ?? 30,
+    expireInHours: config.expireInHours ?? 2,
+    archiveCompletedAfterSeconds: config.archiveCompletedAfterSeconds ?? 7 * 24 * 60 * 60,
   })
 }
 

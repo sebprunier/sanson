@@ -7,7 +7,13 @@ import { handleShapefileIngest } from './ingest-shapefile'
 import { sanitizeColumnName } from '@sanson/core'
 import type { GeoJsonFeatureCollection } from '@sanson/core'
 
-const BATCH_SIZE = 500
+async function getConfigNumber(db: Pool, key: string, fallback: number): Promise<number> {
+  const { rows } = await db.query<{ value: string }>(
+    'SELECT value FROM sanson_config WHERE key = $1',
+    [key],
+  )
+  return rows[0] ? parseInt(rows[0].value, 10) : fallback
+}
 
 function inferGeoJsonSqlType(value: unknown): string {
   if (typeof value === 'number') {
@@ -32,6 +38,7 @@ export async function handleIngest(db: Pool, payload: IngestJobPayload): Promise
   }
 
   const { importHistoryId, filePath, workspaceId, collectionName, srid, sourceFileName } = payload
+  const batchSize = await getConfigNumber(db, 'import.batch_size', 500)
 
   await updateProgress(db, importHistoryId, {
     status: 'running',
@@ -115,8 +122,7 @@ export async function handleIngest(db: Pool, payload: IngestJobPayload): Promise
     )
     insertedCount++
 
-    // Update progress every BATCH_SIZE features
-    if (insertedCount % BATCH_SIZE === 0 || insertedCount === totalFeatures) {
+    if (insertedCount % batchSize === 0 || insertedCount === totalFeatures) {
       const progress = Math.round((insertedCount / totalFeatures) * 100)
       await updateProgress(db, importHistoryId, {
         progress,

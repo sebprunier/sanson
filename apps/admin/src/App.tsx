@@ -7,6 +7,7 @@ import { CollectionDetail } from './pages/CollectionDetail'
 import { Import } from './pages/Import'
 import { ApiExplorer } from './pages/ApiExplorer'
 import { Health } from './pages/Health'
+import { Configuration } from './pages/Configuration'
 
 export default function App() {
   return (
@@ -20,6 +21,7 @@ export default function App() {
           <Route path="import" element={<Import />} />
           <Route path="api-explorer" element={<ApiExplorer />} />
           <Route path="health" element={<Health />} />
+          <Route path="configuration" element={<Configuration />} />
         </Route>
       </Routes>
     </BrowserRouter>
