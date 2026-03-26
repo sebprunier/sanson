@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test'
 
 test.describe('Navigation', () => {
   test('sidebar links navigate to correct pages', async ({ page }) => {
-    await page.goto('/admin')
+    await page.goto('/admin/')
 
     const sidebar = page.getByRole('complementary')
 
@@ -19,7 +19,7 @@ test.describe('Navigation', () => {
 
     // Navigate to Import
     await sidebar.getByRole('link', { name: 'Import' }).click()
-    await expect(page.getByRole('heading', { name: 'Import data' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Import' })).toBeVisible()
 
     // Navigate to API Explorer
     await sidebar.getByRole('link', { name: 'API Explorer' }).click()
@@ -31,7 +31,7 @@ test.describe('Navigation', () => {
   })
 
   test('sidebar shows logo and version', async ({ page }) => {
-    await page.goto('/admin')
+    await page.goto('/admin/')
     await expect(page.getByRole('img', { name: 'Sanson' })).toBeVisible()
     await expect(page.getByText('Sanson v0.1.0')).toBeVisible()
   })
