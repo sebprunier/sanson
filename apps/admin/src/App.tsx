@@ -18,6 +18,7 @@ export default function App() {
           <Route path="workspaces" element={<Workspaces />} />
           <Route path="collections" element={<Collections />} />
           <Route path="collections/:id" element={<CollectionDetail />} />
+          <Route path="collections/:id/:tab" element={<CollectionDetail />} />
           <Route path="import" element={<Import />} />
           <Route path="api-explorer" element={<ApiExplorer />} />
           <Route path="health" element={<Health />} />

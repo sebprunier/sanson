@@ -32,14 +32,24 @@ interface ItemsResponse {
   features: GeoJsonFeature[]
 }
 
-type Tab = 'map' | 'table' | 'schema' | 'history' | 'settings' | 'style' | 'api' | 'export'
+const TABS = ['map', 'table', 'schema', 'history', 'settings', 'style', 'api', 'export'] as const
+type Tab = (typeof TABS)[number]
+
+function isTab(value: string | undefined): value is Tab {
+  return TABS.includes(value as Tab)
+}
 
 export function CollectionDetail() {
-  const { id } = useParams<{ id: string }>()
+  const { id, tab: tabParam } = useParams<{ id: string; tab?: string }>()
   const navigate = useNavigate()
   const [collection, setCollection] = useState<Collection | null>(null)
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<Tab>('map')
+  const tab: Tab = isTab(tabParam) ? tabParam : 'map'
+
+  const setTab = (t: Tab) => {
+    const base = `/collections/${id}`
+    navigate(t === 'map' ? base : `${base}/${t}`, { replace: true })
+  }
 
   useEffect(() => {
     if (!id) return
