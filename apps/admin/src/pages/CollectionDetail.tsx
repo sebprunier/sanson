@@ -1747,52 +1747,86 @@ function ExportView({ collection }: { collection: Collection }) {
   )
 }
 
-function CurlBlock({
-  label,
-  description,
-  curl,
-}: {
-  label: string
-  description: string
-  curl: string
-}) {
+function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false)
   const handleCopy = () => {
-    navigator.clipboard.writeText(curl).then(() => {
+    navigator.clipboard.writeText(text).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     })
   }
   return (
-    <div className="border border-gray-200 rounded-lg overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b border-gray-200">
-        <div>
-          <span className="text-sm font-medium text-gray-900">{label}</span>
-          <span className="ml-2 text-xs text-gray-400">{description}</span>
+    <button
+      onClick={handleCopy}
+      className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+    >
+      <svg
+        className="w-3 h-3"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        strokeWidth={2}
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9.75a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184"
+        />
+      </svg>
+      {copied ? 'Copied!' : 'Copy'}
+    </button>
+  )
+}
+
+function MethodBadge({ method }: { method: string }) {
+  return (
+    <span className="inline-block px-2 py-0.5 rounded text-xs font-bold bg-green-100 text-green-700">
+      {method}
+    </span>
+  )
+}
+
+interface EndpointExample {
+  label: string
+  description: string
+  curl: string
+}
+
+interface Endpoint {
+  method: string
+  path: string
+  description: string
+  note?: React.ReactNode
+  examples: EndpointExample[]
+}
+
+function EndpointCard({ endpoint }: { endpoint: Endpoint }) {
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <div className="px-5 py-4 border-b border-gray-100">
+        <div className="flex items-center gap-2.5">
+          <MethodBadge method={endpoint.method} />
+          <code className="text-sm font-mono font-medium text-gray-900">{endpoint.path}</code>
         </div>
-        <button
-          onClick={handleCopy}
-          className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-gray-300 text-gray-500 hover:bg-gray-100 transition-colors"
-        >
-          <svg
-            className="w-3 h-3"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9.75a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184"
-            />
-          </svg>
-          {copied ? 'Copied!' : 'Copy'}
-        </button>
+        <p className="text-sm text-gray-500 mt-1.5">{endpoint.description}</p>
+        {endpoint.note && <p className="text-xs text-gray-400 mt-1">{endpoint.note}</p>}
       </div>
-      <pre className="px-4 py-3 text-sm text-gray-800 bg-white overflow-x-auto whitespace-pre-wrap break-all">
-        <code>{curl}</code>
-      </pre>
+      <div className="divide-y divide-gray-100">
+        {endpoint.examples.map((ex) => (
+          <div key={ex.label} className="px-5 py-3">
+            <div className="flex items-center justify-between mb-1.5">
+              <div>
+                <span className="text-xs font-medium text-gray-600">{ex.label}</span>
+                <span className="ml-2 text-xs text-gray-400">{ex.description}</span>
+              </div>
+              <CopyButton text={ex.curl} />
+            </div>
+            <pre className="px-3 py-2 text-xs text-gray-700 bg-gray-50 rounded overflow-x-auto whitespace-pre-wrap break-all">
+              <code>{ex.curl}</code>
+            </pre>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -1806,54 +1840,38 @@ function ApiView({ collection, collectionId }: { collection: Collection; collect
       : collection.bbox
     : null
   const bboxStr = bbox ? bbox.join(',') : '-1.5,43.2,1.3,45.8'
+  const centerLon = bbox ? ((bbox[0] + bbox[2]) / 2).toFixed(4) : '2.3488'
+  const centerLat = bbox ? ((bbox[1] + bbox[3]) / 2).toFixed(4) : '48.8534'
 
-  const sections: Array<{
-    title: string
-    note?: React.ReactNode
-    items: Array<{ label: string; description: string; curl: string }>
-  }> = [
+  const endpoints: Endpoint[] = [
     {
-      title: 'Collection metadata',
-      items: [
+      method: 'GET',
+      path: `/collections/${col}`,
+      description: 'Collection description and metadata',
+      examples: [
         {
-          label: 'GET /collections/{id}',
-          description: 'Collection description and metadata',
+          label: 'Metadata',
+          description: 'Full collection description',
           curl: `curl "${base}/collections/${col}"`,
         },
+      ],
+    },
+    {
+      method: 'GET',
+      path: `/collections/${col}/queryables`,
+      description: 'Available properties for filtering',
+      examples: [
         {
-          label: 'GET /collections/{id}/queryables',
-          description: 'Available properties for filtering',
+          label: 'Queryables',
+          description: 'List filterable properties',
           curl: `curl "${base}/collections/${col}/queryables"`,
         },
       ],
     },
     {
-      title: 'Features (GeoJSON)',
-      items: [
-        {
-          label: 'GET /collections/{id}/items',
-          description: 'First page of features',
-          curl: `curl "${base}/collections/${col}/items"`,
-        },
-        {
-          label: 'Pagination',
-          description: 'Limit results and paginate',
-          curl: `curl "${base}/collections/${col}/items?limit=10&offset=0"`,
-        },
-        {
-          label: 'Bounding box filter',
-          description: 'Spatial filter with bbox',
-          curl: `curl "${base}/collections/${col}/items?bbox=${bboxStr}"`,
-        },
-        {
-          label: 'Single feature',
-          description: 'Get a feature by ID',
-          curl: `curl "${base}/collections/${col}/items/1"`,
-        },
-      ],
-    },
-    {
-      title: 'Filtering',
+      method: 'GET',
+      path: `/collections/${col}/items`,
+      description: 'Features as GeoJSON FeatureCollection',
       note: (
         <>
           Supports{' '}
@@ -1863,90 +1881,111 @@ function ApiView({ collection, collectionId }: { collection: Collection; collect
             rel="noopener noreferrer"
             className="text-primary-500 hover:underline"
           >
-            OGC CQL2
+            CQL2
           </a>{' '}
-          for text and JSON filter expressions, plus spatial shortcuts (point intersection, radius
-          search).
+          filtering, spatial queries, pagination, and CRS reprojection.
         </>
       ),
-      items: [
+      examples: [
         {
-          label: 'CQL2 Text filter',
-          description: 'Filter features with CQL2 expression',
-          curl: `curl "${base}/collections/${col}/items?filter-lang=cql2-text&filter=property='value'"`,
+          label: 'Basic request',
+          description: 'First page of features',
+          curl: `curl "${base}/collections/${col}/items"`,
+        },
+        {
+          label: 'Pagination',
+          description: 'Limit results and paginate',
+          curl: `curl "${base}/collections/${col}/items?limit=10&offset=0"`,
+        },
+        {
+          label: 'Bounding box',
+          description: 'Spatial filter',
+          curl: `curl "${base}/collections/${col}/items?bbox=${bboxStr}"`,
+        },
+        {
+          label: 'CQL2 text filter',
+          description: 'Filter by property value',
+          curl: `curl "${base}/collections/${col}/items?filter-lang=cql2-text&filter=name='Paris'"`,
         },
         {
           label: 'CQL2 JSON filter',
-          description: 'Filter with CQL2 JSON body',
-          curl: `curl "${base}/collections/${col}/items?filter-lang=cql2-json&filter=%7B%22op%22%3A%22%3D%22%2C%22args%22%3A%5B%7B%22property%22%3A%22property%22%7D%2C%22value%22%5D%7D"`,
+          description: 'Filter with JSON expression',
+          curl: `curl "${base}/collections/${col}/items?filter-lang=cql2-json&filter=%7B%22op%22%3A%22%3D%22%2C%22args%22%3A%5B%7B%22property%22%3A%22name%22%7D%2C%22Paris%22%5D%7D"`,
         },
         {
           label: 'Point intersection',
-          description: 'Features intersecting a point',
-          curl: `curl "${base}/collections/${col}/items?lon=${bbox ? ((bbox[0] + bbox[2]) / 2).toFixed(4) : '2.3488'}&lat=${bbox ? ((bbox[1] + bbox[3]) / 2).toFixed(4) : '48.8534'}"`,
+          description: 'Features at a point',
+          curl: `curl "${base}/collections/${col}/items?lon=${centerLon}&lat=${centerLat}"`,
         },
         {
           label: 'Radius search',
-          description: 'Features within a radius (meters)',
-          curl: `curl "${base}/collections/${col}/items?lon=${bbox ? ((bbox[0] + bbox[2]) / 2).toFixed(4) : '2.3488'}&lat=${bbox ? ((bbox[1] + bbox[3]) / 2).toFixed(4) : '48.8534'}&radius=5000"`,
+          description: 'Features within distance (meters)',
+          curl: `curl "${base}/collections/${col}/items?lon=${centerLon}&lat=${centerLat}&radius=5000"`,
         },
-      ],
-    },
-    {
-      title: 'Coordinate reference systems',
-      items: [
         {
-          label: 'Reproject output',
-          description: 'Get features in a different CRS',
+          label: 'Reproject to EPSG:3857',
+          description: 'Output in a different CRS',
           curl: `curl "${base}/collections/${col}/items?limit=5&crs=http://www.opengis.net/def/crs/EPSG/0/3857"`,
         },
         {
-          label: 'Bbox in different CRS',
+          label: 'Bbox with CRS',
           description: 'Specify bbox coordinate system',
           curl: `curl "${base}/collections/${col}/items?bbox=0,0,1,1&bbox-crs=http://www.opengis.net/def/crs/EPSG/0/4326"`,
         },
       ],
     },
     {
-      title: 'Vector tiles',
-      items: [
+      method: 'GET',
+      path: `/collections/${col}/items/{featureId}`,
+      description: 'Single feature by ID',
+      examples: [
         {
-          label: 'GET /collections/{id}/tiles/{z}/{x}/{y}.pbf',
-          description: 'Mapbox Vector Tile (MVT)',
+          label: 'Get feature',
+          description: 'Retrieve feature with ID 1',
+          curl: `curl "${base}/collections/${col}/items/1"`,
+        },
+      ],
+    },
+    {
+      method: 'GET',
+      path: `/collections/${col}/tiles/{z}/{x}/{y}.pbf`,
+      description: 'Mapbox Vector Tile (MVT)',
+      examples: [
+        {
+          label: 'Download tile',
+          description: 'Get a vector tile at z/x/y',
           curl: `curl "${base}/collections/${col}/tiles/6/32/22.pbf" --output tile.pbf`,
         },
       ],
     },
   ]
 
-  // Add datetime section if collection has a datetime column
+  // Add datetime examples to /items endpoint if collection has a datetime column
   if (collection.datetime_column) {
-    const dtSection = {
-      title: 'Temporal filter',
-      items: [
+    const itemsEndpoint = endpoints.find((e) => e.path === `/collections/${col}/items`)
+    if (itemsEndpoint) {
+      itemsEndpoint.examples.push(
         {
-          label: 'Instant',
+          label: 'Datetime instant',
           description: 'Features at a specific time',
           curl: `curl "${base}/collections/${col}/items?datetime=2024-01-01T00:00:00Z"`,
         },
         {
-          label: 'Interval',
+          label: 'Datetime interval',
           description: 'Features within a time range',
           curl: `curl "${base}/collections/${col}/items?datetime=2024-01-01T00:00:00Z/2024-12-31T23:59:59Z"`,
         },
         {
-          label: 'Open-ended',
+          label: 'Open-ended interval',
           description: 'Features after a date',
           curl: `curl "${base}/collections/${col}/items?datetime=2024-01-01T00:00:00Z/.."`,
         },
-      ],
+      )
     }
-    // Insert after "Filtering"
-    sections.splice(3, 0, dtSection)
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="flex items-start justify-between">
         <p className="text-sm text-gray-500">
           API examples for{' '}
@@ -1982,19 +2021,11 @@ function ApiView({ collection, collectionId }: { collection: Collection; collect
           </button>
         </div>
       </div>
-      {sections.map((section) => (
-        <div key={section.title}>
-          <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
-            {section.title}
-          </h3>
-          {section.note && <p className="text-xs text-gray-400 mb-3">{section.note}</p>}
-          <div className="space-y-3">
-            {section.items.map((item) => (
-              <CurlBlock key={item.label} {...item} />
-            ))}
-          </div>
-        </div>
-      ))}
+      <div className="space-y-4">
+        {endpoints.map((ep) => (
+          <EndpointCard key={ep.path} endpoint={ep} />
+        ))}
+      </div>
     </div>
   )
 }

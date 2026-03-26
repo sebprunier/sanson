@@ -30,9 +30,9 @@ test.describe('Collection Detail', () => {
     await goToCollectionDetail(page)
     await page.getByRole('button', { name: 'API', exact: true }).click()
 
-    await expect(page.getByText('Collection metadata')).toBeVisible()
-    await expect(page.getByText('Features (GeoJSON)')).toBeVisible()
-    await expect(page.getByText('Vector tiles')).toBeVisible()
+    await expect(page.getByText('Collection description and metadata')).toBeVisible()
+    await expect(page.getByText('Features as GeoJSON FeatureCollection')).toBeVisible()
+    await expect(page.getByText('Mapbox Vector Tile (MVT)')).toBeVisible()
     await expect(page.locator('code', { hasText: 'curl' }).first()).toBeVisible()
     await expect(page.getByRole('button', { name: 'Copy' }).first()).toBeVisible()
   })
