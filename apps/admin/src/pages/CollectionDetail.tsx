@@ -1578,7 +1578,7 @@ function CurlBlock({
 
 function ApiView({ collection, collectionId }: { collection: Collection; collectionId: string }) {
   const base = window.location.origin
-  const col = encodeURIComponent(collectionId)
+  const col = collectionId
   const bbox: number[] | null = collection.bbox
     ? typeof collection.bbox === 'string'
       ? JSON.parse(collection.bbox)
@@ -1661,12 +1661,12 @@ function ApiView({ collection, collectionId }: { collection: Collection; collect
         {
           label: 'Reproject output',
           description: 'Get features in a different CRS',
-          curl: `curl "${base}/collections/${col}/items?limit=5&crs=http%3A%2F%2Fwww.opengis.net%2Fdef%2Fcrs%2FEPSG%2F0%2F3857"`,
+          curl: `curl "${base}/collections/${col}/items?limit=5&crs=http://www.opengis.net/def/crs/EPSG/0/3857"`,
         },
         {
           label: 'Bbox in different CRS',
           description: 'Specify bbox coordinate system',
-          curl: `curl "${base}/collections/${col}/items?bbox=0,0,1,1&bbox-crs=http%3A%2F%2Fwww.opengis.net%2Fdef%2Fcrs%2FEPSG%2F0%2F4326"`,
+          curl: `curl "${base}/collections/${col}/items?bbox=0,0,1,1&bbox-crs=http://www.opengis.net/def/crs/EPSG/0/4326"`,
         },
       ],
     },
