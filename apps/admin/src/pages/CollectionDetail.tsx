@@ -32,7 +32,7 @@ interface ItemsResponse {
   features: GeoJsonFeature[]
 }
 
-type Tab = 'map' | 'table' | 'schema' | 'history' | 'settings' | 'style'
+type Tab = 'map' | 'table' | 'schema' | 'history' | 'settings' | 'style' | 'api'
 
 export function CollectionDetail() {
   const { id } = useParams<{ id: string }>()
@@ -101,6 +101,9 @@ export function CollectionDetail() {
         <TabButton active={tab === 'style'} onClick={() => setTab('style')}>
           Style
         </TabButton>
+        <TabButton active={tab === 'api'} onClick={() => setTab('api')}>
+          API
+        </TabButton>
       </div>
 
       {tab === 'map' && (
@@ -116,6 +119,7 @@ export function CollectionDetail() {
       {tab === 'history' && <HistoryView collectionId={collection.id} />}
       {tab === 'settings' && <SettingsView collection={collection} onUpdate={setCollection} />}
       {tab === 'style' && <StyleView collection={collection} onUpdate={setCollection} />}
+      {tab === 'api' && <ApiView collection={collection} collectionId={collectionId} />}
     </div>
   )
 }
@@ -1491,6 +1495,237 @@ function HistoryView({ collectionId }: { collectionId: string }) {
           </tbody>
         </table>
       </div>
+    </div>
+  )
+}
+
+// --- API tab ---
+
+import { exportBruno, exportPostman } from '../utils/apiExport'
+
+function CurlBlock({
+  label,
+  description,
+  curl,
+}: {
+  label: string
+  description: string
+  curl: string
+}) {
+  const [copied, setCopied] = useState(false)
+  const handleCopy = () => {
+    navigator.clipboard.writeText(curl).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
+  return (
+    <div className="border border-gray-200 rounded-lg overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b border-gray-200">
+        <div>
+          <span className="text-sm font-medium text-gray-900">{label}</span>
+          <span className="ml-2 text-xs text-gray-400">{description}</span>
+        </div>
+        <button
+          onClick={handleCopy}
+          className="text-xs px-2 py-1 rounded border border-gray-300 text-gray-500 hover:bg-gray-100 transition-colors"
+        >
+          {copied ? 'Copied!' : 'Copy'}
+        </button>
+      </div>
+      <pre className="px-4 py-3 text-sm text-gray-800 bg-white overflow-x-auto whitespace-pre-wrap break-all">
+        <code>{curl}</code>
+      </pre>
+    </div>
+  )
+}
+
+function ApiView({ collection, collectionId }: { collection: Collection; collectionId: string }) {
+  const base = window.location.origin
+  const col = encodeURIComponent(collectionId)
+  const bbox: number[] | null = collection.bbox
+    ? typeof collection.bbox === 'string'
+      ? JSON.parse(collection.bbox)
+      : collection.bbox
+    : null
+  const bboxStr = bbox ? bbox.join(',') : '-1.5,43.2,1.3,45.8'
+
+  const sections: Array<{
+    title: string
+    items: Array<{ label: string; description: string; curl: string }>
+  }> = [
+    {
+      title: 'Collection metadata',
+      items: [
+        {
+          label: 'GET /collections/{id}',
+          description: 'Collection description and metadata',
+          curl: `curl "${base}/collections/${col}"`,
+        },
+        {
+          label: 'GET /collections/{id}/queryables',
+          description: 'Available properties for filtering',
+          curl: `curl "${base}/collections/${col}/queryables"`,
+        },
+      ],
+    },
+    {
+      title: 'Features (GeoJSON)',
+      items: [
+        {
+          label: 'GET /collections/{id}/items',
+          description: 'First page of features',
+          curl: `curl "${base}/collections/${col}/items"`,
+        },
+        {
+          label: 'Pagination',
+          description: 'Limit results and paginate',
+          curl: `curl "${base}/collections/${col}/items?limit=10&offset=0"`,
+        },
+        {
+          label: 'Bounding box filter',
+          description: 'Spatial filter with bbox',
+          curl: `curl "${base}/collections/${col}/items?bbox=${bboxStr}"`,
+        },
+        {
+          label: 'Single feature',
+          description: 'Get a feature by ID',
+          curl: `curl "${base}/collections/${col}/items/1"`,
+        },
+      ],
+    },
+    {
+      title: 'Filtering',
+      items: [
+        {
+          label: 'CQL2 Text filter',
+          description: 'Filter features with CQL2 expression',
+          curl: `curl "${base}/collections/${col}/items?filter-lang=cql2-text&filter=property='value'"`,
+        },
+        {
+          label: 'CQL2 JSON filter',
+          description: 'Filter with CQL2 JSON body',
+          curl: `curl "${base}/collections/${col}/items?filter-lang=cql2-json&filter=%7B%22op%22%3A%22%3D%22%2C%22args%22%3A%5B%7B%22property%22%3A%22property%22%7D%2C%22value%22%5D%7D"`,
+        },
+        {
+          label: 'Point intersection',
+          description: 'Features intersecting a point',
+          curl: `curl "${base}/collections/${col}/items?lon=${bbox ? ((bbox[0] + bbox[2]) / 2).toFixed(4) : '2.3488'}&lat=${bbox ? ((bbox[1] + bbox[3]) / 2).toFixed(4) : '48.8534'}"`,
+        },
+        {
+          label: 'Radius search',
+          description: 'Features within a radius (meters)',
+          curl: `curl "${base}/collections/${col}/items?lon=${bbox ? ((bbox[0] + bbox[2]) / 2).toFixed(4) : '2.3488'}&lat=${bbox ? ((bbox[1] + bbox[3]) / 2).toFixed(4) : '48.8534'}&radius=5000"`,
+        },
+      ],
+    },
+    {
+      title: 'Coordinate reference systems',
+      items: [
+        {
+          label: 'Reproject output',
+          description: 'Get features in a different CRS',
+          curl: `curl "${base}/collections/${col}/items?limit=5&crs=http%3A%2F%2Fwww.opengis.net%2Fdef%2Fcrs%2FEPSG%2F0%2F3857"`,
+        },
+        {
+          label: 'Bbox in different CRS',
+          description: 'Specify bbox coordinate system',
+          curl: `curl "${base}/collections/${col}/items?bbox=0,0,1,1&bbox-crs=http%3A%2F%2Fwww.opengis.net%2Fdef%2Fcrs%2FEPSG%2F0%2F4326"`,
+        },
+      ],
+    },
+    {
+      title: 'Vector tiles',
+      items: [
+        {
+          label: 'GET /collections/{id}/tiles/{z}/{x}/{y}.pbf',
+          description: 'Mapbox Vector Tile (MVT)',
+          curl: `curl "${base}/collections/${col}/tiles/6/32/22.pbf" --output tile.pbf`,
+        },
+      ],
+    },
+  ]
+
+  // Add datetime section if collection has a datetime column
+  if (collection.datetime_column) {
+    const dtSection = {
+      title: 'Temporal filter',
+      items: [
+        {
+          label: 'Instant',
+          description: 'Features at a specific time',
+          curl: `curl "${base}/collections/${col}/items?datetime=2024-01-01T00:00:00Z"`,
+        },
+        {
+          label: 'Interval',
+          description: 'Features within a time range',
+          curl: `curl "${base}/collections/${col}/items?datetime=2024-01-01T00:00:00Z/2024-12-31T23:59:59Z"`,
+        },
+        {
+          label: 'Open-ended',
+          description: 'Features after a date',
+          curl: `curl "${base}/collections/${col}/items?datetime=2024-01-01T00:00:00Z/.."`,
+        },
+      ],
+    }
+    // Insert after "Filtering"
+    sections.splice(3, 0, dtSection)
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-start justify-between">
+        <p className="text-sm text-gray-500">
+          API examples for{' '}
+          <code className="bg-gray-100 px-1.5 py-0.5 rounded text-primary-700 font-mono text-xs">
+            {collectionId}
+          </code>
+          . All endpoints follow the{' '}
+          <a
+            href="https://ogcapi.ogc.org/features/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary-600 hover:underline"
+          >
+            OGC API — Features
+          </a>{' '}
+          specification.
+        </p>
+        <div className="flex gap-2 ml-4 shrink-0">
+          <a
+            href="/api"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            OpenAPI
+          </a>
+          <button
+            onClick={() => exportPostman(collectionId, collection)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            Postman
+          </button>
+          <button
+            onClick={() => exportBruno(collectionId, collection)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            Bruno
+          </button>
+        </div>
+      </div>
+      {sections.map((section) => (
+        <div key={section.title}>
+          <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+            {section.title}
+          </h3>
+          <div className="space-y-3">
+            {section.items.map((item) => (
+              <CurlBlock key={item.label} {...item} />
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   )
 }

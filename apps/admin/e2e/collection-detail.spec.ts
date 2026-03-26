@@ -22,6 +22,18 @@ test.describe('Collection Detail', () => {
     await expect(page.getByRole('button', { name: 'Table', exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Schema', exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: 'History', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'API', exact: true })).toBeVisible()
+  })
+
+  test('API tab shows curl examples with copy buttons', async ({ page }) => {
+    await goToCollectionDetail(page)
+    await page.getByRole('button', { name: 'API', exact: true }).click()
+
+    await expect(page.getByText('Collection metadata')).toBeVisible()
+    await expect(page.getByText('Features (GeoJSON)')).toBeVisible()
+    await expect(page.getByText('Vector tiles')).toBeVisible()
+    await expect(page.locator('code', { hasText: 'curl' }).first()).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Copy' }).first()).toBeVisible()
   })
 
   test('table tab shows features and filter input', async ({ page }) => {
