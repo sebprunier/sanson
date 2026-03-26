@@ -760,137 +760,148 @@ function SettingsView({
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="bg-white rounded-lg border border-gray-200 p-6 max-w-2xl space-y-5"
-    >
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Workspace</label>
-        <select
-          value={workspaceId}
-          onChange={(e) => setWorkspaceId(e.target.value)}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-        >
-          {workspaces.map((ws) => (
-            <option key={ws.id} value={ws.id}>
-              {ws.name}
-            </option>
-          ))}
-        </select>
-      </div>
+    <form onSubmit={handleSubmit}>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {/* Left column — general settings + save */}
+        <div className="self-start space-y-5">
+          <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-5">
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">General</h2>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-        <textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          rows={3}
-          placeholder="A short description of this collection"
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Attribution</label>
-        <input
-          type="text"
-          value={attribution}
-          onChange={(e) => setAttribution(e.target.value)}
-          placeholder="e.g. OpenStreetMap contributors"
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Datetime column</label>
-        <select
-          value={datetimeColumn}
-          onChange={(e) => setDatetimeColumn(e.target.value)}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-        >
-          <option value="">None</option>
-          {dateColumns.map((c) => (
-            <option key={c.column} value={c.column}>
-              {c.column} ({c.type})
-            </option>
-          ))}
-        </select>
-        <p className="text-xs text-gray-400 mt-1">
-          Enables the OGC <code>?datetime=</code> filter on this collection
-        </p>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">Exposed fields</label>
-        <p className="text-xs text-gray-400 mb-3">
-          Choose which columns are exposed in the API. Uncheck a column to hide it. Set an alias to
-          rename it in the API response.
-        </p>
-        {fields.length > 0 ? (
-          <div className="border border-gray-200 rounded-lg overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50">
-                <tr className="border-b border-gray-200">
-                  <th className="text-left px-3 py-2 font-medium text-gray-600 w-10">On</th>
-                  <th className="text-left px-3 py-2 font-medium text-gray-600">Column</th>
-                  <th className="text-left px-3 py-2 font-medium text-gray-600">Alias</th>
-                </tr>
-              </thead>
-              <tbody>
-                {fields.map((f) => (
-                  <tr key={f.source} className="border-b border-gray-100 last:border-0">
-                    <td className="px-3 py-2">
-                      <input
-                        type="checkbox"
-                        checked={f.enabled}
-                        onChange={() => toggleField(f.source)}
-                        className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                      />
-                    </td>
-                    <td className="px-3 py-2 font-mono text-gray-700">{f.source}</td>
-                    <td className="px-3 py-2">
-                      <input
-                        type="text"
-                        value={f.alias}
-                        onChange={(e) => setAlias(f.source, e.target.value)}
-                        disabled={!f.enabled}
-                        className="w-full border border-gray-200 rounded px-2 py-1 text-sm disabled:opacity-40 focus:outline-none focus:ring-1 focus:ring-primary-500"
-                      />
-                    </td>
-                  </tr>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Workspace</label>
+              <select
+                value={workspaceId}
+                onChange={(e) => setWorkspaceId(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                {workspaces.map((ws) => (
+                  <option key={ws.id} value={ws.id}>
+                    {ws.name}
+                  </option>
                 ))}
-              </tbody>
-            </table>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={3}
+                placeholder="A short description of this collection"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Attribution</label>
+              <input
+                type="text"
+                value={attribution}
+                onChange={(e) => setAttribution(e.target.value)}
+                placeholder="e.g. OpenStreetMap contributors"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Datetime column
+              </label>
+              <select
+                value={datetimeColumn}
+                onChange={(e) => setDatetimeColumn(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="">None</option>
+                {dateColumns.map((c) => (
+                  <option key={c.column} value={c.column}>
+                    {c.column} ({c.type})
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-400 mt-1">
+                Enables the OGC <code>?datetime=</code> filter on this collection
+              </p>
+            </div>
           </div>
-        ) : (
-          <div className="animate-pulse h-20 bg-gray-100 rounded-lg" />
-        )}
-      </div>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
-          {error}
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          <div className="flex items-center gap-3">
+            <button
+              type="submit"
+              disabled={saving}
+              className="inline-flex items-center gap-1.5 bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-800 disabled:opacity-50 transition-colors"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+              </svg>
+              {saving ? 'Saving...' : 'Save'}
+            </button>
+            {saved && <span className="text-sm text-green-600">Saved successfully</span>}
+          </div>
         </div>
-      )}
 
-      <div className="flex items-center gap-3">
-        <button
-          type="submit"
-          disabled={saving}
-          className="inline-flex items-center gap-1.5 bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-800 disabled:opacity-50 transition-colors"
-        >
-          <svg
-            className="w-4 h-4"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-          </svg>
-          {saving ? 'Saving...' : 'Save'}
-        </button>
-        {saved && <span className="text-sm text-green-600">Saved successfully</span>}
+        {/* Right column — exposed fields */}
+        <div className="bg-white rounded-lg border border-gray-200 p-6 self-start">
+          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">
+            Exposed fields
+          </h2>
+          <p className="text-xs text-gray-400 mb-3">
+            Choose which columns are exposed in the API. Uncheck a column to hide it. Set an alias
+            to rename it in the API response.
+          </p>
+          {fields.length > 0 ? (
+            <div className="border border-gray-200 rounded-lg overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr className="border-b border-gray-200">
+                    <th className="text-left px-3 py-2 font-medium text-gray-600 w-10">On</th>
+                    <th className="text-left px-3 py-2 font-medium text-gray-600">Column</th>
+                    <th className="text-left px-3 py-2 font-medium text-gray-600">Alias</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {fields.map((f) => (
+                    <tr key={f.source} className="border-b border-gray-100 last:border-0">
+                      <td className="px-3 py-2">
+                        <input
+                          type="checkbox"
+                          checked={f.enabled}
+                          onChange={() => toggleField(f.source)}
+                          className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                        />
+                      </td>
+                      <td className="px-3 py-2 font-mono text-gray-700">{f.source}</td>
+                      <td className="px-3 py-2">
+                        <input
+                          type="text"
+                          value={f.alias}
+                          onChange={(e) => setAlias(f.source, e.target.value)}
+                          disabled={!f.enabled}
+                          className="w-full border border-gray-200 rounded px-2 py-1 text-sm disabled:opacity-40 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="animate-pulse h-20 bg-gray-100 rounded-lg" />
+          )}
+        </div>
       </div>
     </form>
   )
