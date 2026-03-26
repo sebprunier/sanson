@@ -26,7 +26,7 @@ const navLinkClass = (isActive: boolean) =>
 
 export function Sidebar() {
   return (
-    <aside className="w-64 bg-primary-800 text-white flex flex-col min-h-screen">
+    <aside className="w-64 bg-primary-800 text-white flex flex-col h-full overflow-y-auto shrink-0">
       <div className="flex items-center gap-3 px-5 py-5 border-b border-primary-700">
         <img src={`${import.meta.env.BASE_URL}logo.png`} alt="Sanson" className="w-9 h-9 rounded" />
         <span className="text-lg font-semibold tracking-tight">Sanson</span>
