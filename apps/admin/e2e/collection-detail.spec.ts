@@ -23,6 +23,7 @@ test.describe('Collection Detail', () => {
     await expect(page.getByRole('button', { name: 'Schema', exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: 'History', exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: 'API', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Export', exact: true })).toBeVisible()
   })
 
   test('API tab shows curl examples with copy buttons', async ({ page }) => {

@@ -32,7 +32,7 @@ interface ItemsResponse {
   features: GeoJsonFeature[]
 }
 
-type Tab = 'map' | 'table' | 'schema' | 'history' | 'settings' | 'style' | 'api'
+type Tab = 'map' | 'table' | 'schema' | 'history' | 'settings' | 'style' | 'api' | 'export'
 
 export function CollectionDetail() {
   const { id } = useParams<{ id: string }>()
@@ -63,23 +63,12 @@ export function CollectionDetail() {
         &larr; Back to collections
       </button>
 
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">{collection.name}</h1>
-          <p className="text-sm text-gray-500">
-            {collection.workspace_name} &middot; {collection.geometry_type ?? 'Unknown'} &middot;{' '}
-            {collection.feature_count?.toLocaleString() ?? 0} features &middot; SRID{' '}
-            {collection.srid}
-          </p>
-        </div>
-        <a
-          href={api.collections.exportUrl(collection.id)}
-          download
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary-700 border border-primary-300 rounded-lg hover:bg-primary-50 transition-colors"
-        >
-          <DownloadIcon />
-          Export GeoJSON
-        </a>
+      <div className="mb-4">
+        <h1 className="text-2xl font-bold text-gray-900">{collection.name}</h1>
+        <p className="text-sm text-gray-500">
+          {collection.workspace_name} &middot; {collection.geometry_type ?? 'Unknown'} &middot;{' '}
+          {collection.feature_count?.toLocaleString() ?? 0} features &middot; SRID {collection.srid}
+        </p>
       </div>
 
       <div className="flex gap-1 mb-4 border-b border-gray-200">
@@ -104,6 +93,9 @@ export function CollectionDetail() {
         <TabButton active={tab === 'api'} onClick={() => setTab('api')}>
           API
         </TabButton>
+        <TabButton active={tab === 'export'} onClick={() => setTab('export')}>
+          Export
+        </TabButton>
       </div>
 
       {tab === 'map' && (
@@ -120,6 +112,7 @@ export function CollectionDetail() {
       {tab === 'settings' && <SettingsView collection={collection} onUpdate={setCollection} />}
       {tab === 'style' && <StyleView collection={collection} onUpdate={setCollection} />}
       {tab === 'api' && <ApiView collection={collection} collectionId={collectionId} />}
+      {tab === 'export' && <ExportView collection={collection} />}
     </div>
   )
 }
@@ -1580,6 +1573,158 @@ function ExternalSmallIcon() {
         d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"
       />
     </svg>
+  )
+}
+
+const EXPORT_FORMATS = [
+  { value: 'geojson', label: 'GeoJSON', extension: '.geojson', mime: 'application/geo+json' },
+] as const
+
+type ExportFormat = (typeof EXPORT_FORMATS)[number]['value']
+
+function ExportView({ collection }: { collection: Collection }) {
+  const [filter, setFilter] = useState('')
+  const [bbox, setBbox] = useState('')
+  const [limit, setLimit] = useState('')
+  const [format, setFormat] = useState<ExportFormat>('geojson')
+  const [exporting, setExporting] = useState(false)
+  const [error, setError] = useState('')
+  const [resultInfo, setResultInfo] = useState('')
+
+  const handleExport = async () => {
+    setError('')
+    setResultInfo('')
+    setExporting(true)
+    try {
+      const params: { filter?: string; bbox?: string; limit?: number } = {}
+      if (filter.trim()) params.filter = filter.trim()
+      if (bbox.trim()) params.bbox = bbox.trim()
+      if (limit.trim()) {
+        const n = parseInt(limit.trim(), 10)
+        if (isNaN(n) || n <= 0) {
+          setError('Limit must be a positive integer')
+          setExporting(false)
+          return
+        }
+        params.limit = n
+      }
+
+      const url = api.collections.exportUrl(collection.id, params)
+      const res = await fetch(url)
+      if (!res.ok) {
+        const body = await res.json().catch(() => null)
+        throw new Error(body?.message ?? `HTTP ${res.status}`)
+      }
+
+      const data = await res.json()
+      const count = data.features?.length ?? 0
+
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/geo+json' })
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = `${collection.workspace_name}_${collection.name}.geojson`
+      a.click()
+      URL.revokeObjectURL(a.href)
+
+      setResultInfo(`${count.toLocaleString()} feature${count !== 1 ? 's' : ''} exported`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-lg border border-gray-200 p-5">
+        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">Format</h2>
+        <div className="flex gap-3">
+          {EXPORT_FORMATS.map((f) => (
+            <button
+              key={f.value}
+              onClick={() => setFormat(f.value)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                format === f.value
+                  ? 'bg-primary-50 border-primary-300 text-primary-700'
+                  : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="bg-white rounded-lg border border-gray-200 p-5">
+        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">
+          Filters
+        </h2>
+        <p className="text-xs text-gray-400 mb-4">
+          Optional — leave empty to export the entire collection.
+        </p>
+        <div className="space-y-4 max-w-xl">
+          <div>
+            <label htmlFor="export-filter" className="block text-sm font-medium text-gray-700 mb-1">
+              CQL2 filter
+            </label>
+            <input
+              id="export-filter"
+              type="text"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              placeholder="e.g. departement='GIRONDE'"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+          <div>
+            <label htmlFor="export-bbox" className="block text-sm font-medium text-gray-700 mb-1">
+              Bounding box
+            </label>
+            <input
+              id="export-bbox"
+              type="text"
+              value={bbox}
+              onChange={(e) => setBbox(e.target.value)}
+              placeholder="minLon,minLat,maxLon,maxLat"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+          <div>
+            <label htmlFor="export-limit" className="block text-sm font-medium text-gray-700 mb-1">
+              Limit
+            </label>
+            <input
+              id="export-limit"
+              type="number"
+              min={1}
+              value={limit}
+              onChange={(e) => setLimit(e.target.value)}
+              placeholder="No limit"
+              className="w-40 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+            <p className="text-xs text-gray-400 mt-1">Maximum number of features to export</p>
+          </div>
+        </div>
+      </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      <div className="flex items-center gap-3">
+        <button
+          onClick={handleExport}
+          disabled={exporting}
+          className="inline-flex items-center gap-1.5 bg-primary-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-primary-800 disabled:opacity-50 transition-colors"
+        >
+          <DownloadIcon />
+          {exporting ? 'Exporting...' : 'Export'}
+        </button>
+        {resultInfo && <span className="text-sm text-green-600 font-medium">{resultInfo}</span>}
+      </div>
+    </div>
   )
 }
 

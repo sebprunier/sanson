@@ -260,7 +260,14 @@ export const api = {
       return request<ClassifyResult>(`/api/admin/collections/${id}/classify?${qs}`)
     },
     delete: (id: string) => request<void>(`/api/admin/collections/${id}`, { method: 'DELETE' }),
-    exportUrl: (id: string) => `/api/admin/collections/${id}/export`,
+    exportUrl: (id: string, params?: { filter?: string; bbox?: string; limit?: number }) => {
+      const qs = new URLSearchParams()
+      if (params?.filter) qs.set('filter', params.filter)
+      if (params?.bbox) qs.set('bbox', params.bbox)
+      if (params?.limit) qs.set('limit', String(params.limit))
+      const query = qs.toString()
+      return `/api/admin/collections/${id}/export${query ? `?${query}` : ''}`
+    },
   },
 
   preview: (file: File) => {

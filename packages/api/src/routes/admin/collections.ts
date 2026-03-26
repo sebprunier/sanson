@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify'
 import { Pool } from 'pg'
+import { parseCql2Text } from '@sanson/core'
 
 interface CollectionsRouteOptions {
   db: Pool
@@ -569,7 +570,10 @@ export async function adminCollectionsRoutes(
   })
 
   // GET /api/admin/collections/:id/export
-  app.get<{ Params: { id: string } }>('/api/admin/collections/:id/export', {
+  app.get<{
+    Params: { id: string }
+    Querystring: { filter?: string; bbox?: string; limit?: string }
+  }>('/api/admin/collections/:id/export', {
     schema: {
       tags: ['Admin'],
       summary: 'Export collection as GeoJSON file',
@@ -577,6 +581,17 @@ export async function adminCollectionsRoutes(
         type: 'object',
         properties: { id: { type: 'string' } },
         required: ['id'],
+      },
+      querystring: {
+        type: 'object',
+        properties: {
+          filter: { type: 'string', description: 'CQL2 text filter expression' },
+          bbox: {
+            type: 'string',
+            description: 'Bounding box filter: minLon,minLat,maxLon,maxLat',
+          },
+          limit: { type: 'string', description: 'Maximum number of features to export' },
+        },
       },
     },
     handler: async (request, reply) => {
@@ -589,6 +604,43 @@ export async function adminCollectionsRoutes(
         return { statusCode: 404, error: 'Not Found', message: 'Collection not found' }
       }
       const collection = collectionRows[0]
+
+      const conditions: string[] = []
+      const params: unknown[] = []
+      let paramIndex = 1
+
+      // CQL2 filter
+      if (request.query.filter) {
+        const { rows: colRows } = await options.db.query<{ column_name: string }>(
+          `SELECT column_name FROM information_schema.columns
+           WHERE table_name = $1 AND column_name NOT IN ($2)`,
+          [collection.table_name, collection.geometry_column],
+        )
+        const cqlResult = parseCql2Text(request.query.filter, {
+          allowedColumns: new Set(colRows.map((r) => r.column_name)),
+          startParamIndex: paramIndex,
+          geometryColumn: collection.geometry_column,
+          srid: collection.srid,
+        })
+        conditions.push(cqlResult.sql)
+        params.push(...cqlResult.params)
+        paramIndex += cqlResult.params.length
+      }
+
+      // Bbox filter
+      if (request.query.bbox) {
+        const parts = request.query.bbox.split(',').map(Number)
+        if (parts.length === 4 && parts.every((n) => !isNaN(n))) {
+          conditions.push(
+            `${collection.geometry_column} && ST_Transform(ST_MakeEnvelope($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, 4326), ${collection.srid})`,
+          )
+          params.push(...parts)
+          paramIndex += 4
+        }
+      }
+
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
+      const limitClause = request.query.limit ? `LIMIT ${parseInt(request.query.limit, 10)}` : ''
 
       const geomExpr =
         collection.srid === 4326
@@ -605,7 +657,10 @@ export async function adminCollectionsRoutes(
                 ST_AsGeoJSON(${geomExpr})::json AS geojson,
                 ${propsExpr} AS properties
          FROM ${collection.table_name} t
-         ORDER BY ${collection.id_column}`,
+         ${whereClause}
+         ORDER BY ${collection.id_column}
+         ${limitClause}`,
+        params,
       )
 
       const featureCollection = {
