@@ -20,6 +20,9 @@ interface CollectionRow {
   datetime_column: string | null
   exposed_fields: ExposedField[] | null
   style: StyleConfig | null
+  default_center_lon: number | null
+  default_center_lat: number | null
+  default_zoom: number | null
   srid: number
   bbox: number[] | null
   feature_count: number | null
@@ -66,6 +69,9 @@ interface UpdateCollectionBody {
   datetime_column?: string | null
   exposed_fields?: ExposedField[] | null
   style?: StyleConfig | null
+  default_center_lon?: number | null
+  default_center_lat?: number | null
+  default_zoom?: number | null
   geometry_column?: string
   geometry_type?: string
   id_column?: string
@@ -106,6 +112,9 @@ const collectionSchema = {
       },
     },
     style: { type: 'object', nullable: true, additionalProperties: true },
+    default_center_lon: { type: 'number', nullable: true },
+    default_center_lat: { type: 'number', nullable: true },
+    default_zoom: { type: 'number', nullable: true },
     srid: { type: 'integer' },
     bbox: { type: 'array', nullable: true, items: { type: 'number' } },
     feature_count: { type: 'integer', nullable: true },
@@ -116,8 +125,9 @@ const collectionSchema = {
 
 const COLLECTION_SELECT = `
   SELECT c.id, c.workspace_id, w.name AS workspace_name, c.name, c.description, c.attribution,
-         c.table_name, c.geometry_column, c.geometry_type, c.id_column, c.datetime_column, c.exposed_fields, c.style, c.srid,
-         c.bbox, c.feature_count, c.created_at, c.updated_at
+         c.table_name, c.geometry_column, c.geometry_type, c.id_column, c.datetime_column, c.exposed_fields, c.style,
+         c.default_center_lon, c.default_center_lat, c.default_zoom,
+         c.srid, c.bbox, c.feature_count, c.created_at, c.updated_at
   FROM sanson_collections c
   JOIN sanson_workspaces w ON w.id = c.workspace_id
 `
@@ -274,6 +284,9 @@ export async function adminCollectionsRoutes(
             },
           },
           style: { type: 'object', nullable: true, additionalProperties: true },
+          default_center_lon: { type: 'number', nullable: true, minimum: -180, maximum: 180 },
+          default_center_lat: { type: 'number', nullable: true, minimum: -90, maximum: 90 },
+          default_zoom: { type: 'number', nullable: true, minimum: 0, maximum: 24 },
           geometry_column: { type: 'string' },
           geometry_type: { type: 'string' },
           id_column: { type: 'string' },
@@ -309,6 +322,9 @@ export async function adminCollectionsRoutes(
       if (b.style !== undefined) {
         addField('style', b.style ? JSON.stringify(b.style) : null)
       }
+      addField('default_center_lon', b.default_center_lon)
+      addField('default_center_lat', b.default_center_lat)
+      addField('default_zoom', b.default_zoom)
       addField('geometry_column', b.geometry_column)
       addField('geometry_type', b.geometry_type)
       addField('id_column', b.id_column)

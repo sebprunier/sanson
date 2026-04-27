@@ -14,26 +14,34 @@ CREATE TABLE IF NOT EXISTS sanson_workspaces (
 
 -- Collections (OGC API Features collections)
 CREATE TABLE IF NOT EXISTS sanson_collections (
-    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    workspace_id      UUID REFERENCES sanson_workspaces(id) ON DELETE CASCADE,
-    name              VARCHAR(100) NOT NULL,
-    description       TEXT,
-    attribution       TEXT,
-    table_name        VARCHAR(200) NOT NULL,
-    geometry_column   VARCHAR(100) DEFAULT 'geom',
-    geometry_type     VARCHAR(50),
-    id_column         VARCHAR(100) DEFAULT 'id',
-    datetime_column   VARCHAR(100),
-    srid              INTEGER DEFAULT 4326,
-    bbox              JSONB,
-    temporal_extent   JSONB,
-    exposed_fields    JSONB,
-    style             JSONB,
-    feature_count     BIGINT,
-    created_at        TIMESTAMPTZ DEFAULT now(),
-    updated_at        TIMESTAMPTZ DEFAULT now(),
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    workspace_id        UUID REFERENCES sanson_workspaces(id) ON DELETE CASCADE,
+    name                VARCHAR(100) NOT NULL,
+    description         TEXT,
+    attribution         TEXT,
+    table_name          VARCHAR(200) NOT NULL,
+    geometry_column     VARCHAR(100) DEFAULT 'geom',
+    geometry_type       VARCHAR(50),
+    id_column           VARCHAR(100) DEFAULT 'id',
+    datetime_column     VARCHAR(100),
+    srid                INTEGER DEFAULT 4326,
+    bbox                JSONB,
+    temporal_extent     JSONB,
+    exposed_fields      JSONB,
+    style               JSONB,
+    default_center_lon  DOUBLE PRECISION,
+    default_center_lat  DOUBLE PRECISION,
+    default_zoom        DOUBLE PRECISION,
+    feature_count       BIGINT,
+    created_at          TIMESTAMPTZ DEFAULT now(),
+    updated_at          TIMESTAMPTZ DEFAULT now(),
     UNIQUE(workspace_id, name)
 );
+
+-- Backfill columns for databases initialized before these were added
+ALTER TABLE sanson_collections ADD COLUMN IF NOT EXISTS default_center_lon DOUBLE PRECISION;
+ALTER TABLE sanson_collections ADD COLUMN IF NOT EXISTS default_center_lat DOUBLE PRECISION;
+ALTER TABLE sanson_collections ADD COLUMN IF NOT EXISTS default_zoom       DOUBLE PRECISION;
 
 -- Default workspace (always present, used when no specific workspace is needed)
 INSERT INTO sanson_workspaces (name, description)

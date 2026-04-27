@@ -111,6 +111,7 @@ export function CollectionDetail() {
           bbox={collection.bbox}
           geometryType={collection.geometry_type}
           style={collection.style}
+          defaultView={collectionDefaultView(collection)}
         />
       )}
       {tab === 'data' && <DataView collection={collection} collectionId={collectionId} />}
@@ -190,16 +191,41 @@ function fitToBbox(map: maplibregl.Map, bbox: string | number[] | null) {
   )
 }
 
+interface DefaultView {
+  lon: number
+  lat: number
+  zoom: number
+}
+
+function collectionDefaultView(collection: Collection): DefaultView | null {
+  if (
+    collection.default_center_lon == null ||
+    collection.default_center_lat == null ||
+    collection.default_zoom == null
+  ) {
+    return null
+  }
+  return {
+    lon: collection.default_center_lon,
+    lat: collection.default_center_lat,
+    zoom: collection.default_zoom,
+  }
+}
+
 function MapView({
   collectionId,
   bbox,
   geometryType,
   style,
+  defaultView,
+  onMapReady,
 }: {
   collectionId: string
   bbox: string | number[] | null
   geometryType: string | null
   style?: StyleConfig | null
+  defaultView?: DefaultView | null
+  onMapReady?: (map: maplibregl.Map) => void
 }) {
   const mapContainer = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
@@ -211,9 +237,13 @@ function MapView({
   const styleRef = useRef(style)
   const bboxRef = useRef(bbox)
   const geometryTypeRef = useRef(geometryType)
+  const defaultViewRef = useRef(defaultView)
+  const onMapReadyRef = useRef(onMapReady)
   styleRef.current = style
   bboxRef.current = bbox
   geometryTypeRef.current = geometryType
+  defaultViewRef.current = defaultView
+  onMapReadyRef.current = onMapReady
 
   // Create the map once per collection. Style/bbox updates are handled by the
   // dedicated effects below so the user's pan/zoom/basemap survive style edits.
@@ -221,6 +251,7 @@ function MapView({
     if (!mapContainer.current) return
 
     const initialBasemap = BASEMAPS.light
+    const dv = defaultViewRef.current
     const map = new maplibregl.Map({
       container: mapContainer.current,
       style: {
@@ -235,8 +266,8 @@ function MapView({
         },
         layers: [{ id: 'basemap', type: 'raster', source: 'basemap' }],
       },
-      center: [2.3, 46.8],
-      zoom: 5,
+      center: dv ? [dv.lon, dv.lat] : [2.3, 46.8],
+      zoom: dv ? dv.zoom : 5,
     })
 
     map.addControl(new maplibregl.NavigationControl(), 'top-right')
@@ -250,7 +281,7 @@ function MapView({
       })
 
       applyMapStyle(map, layerName, geometryTypeRef.current, styleRef.current ?? null)
-      fitToBbox(map, bboxRef.current)
+      if (!defaultViewRef.current) fitToBbox(map, bboxRef.current)
 
       map.on('click', (e) => {
         const collectionIds = ['features-circle', 'features-fill', 'features-line'].filter((lid) =>
@@ -268,6 +299,7 @@ function MapView({
     })
 
     mapRef.current = map
+    onMapReadyRef.current?.(map)
     return () => {
       map.remove()
       mapRef.current = null
@@ -875,7 +907,87 @@ interface FieldConfig {
   enabled: boolean
 }
 
+type SettingsSection = 'general' | 'fields' | 'map'
+
 function SettingsView({
+  collection,
+  onUpdate,
+}: {
+  collection: Collection
+  onUpdate: (c: Collection) => void
+}) {
+  const [section, setSection] = useState<SettingsSection>('general')
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-[180px_1fr] gap-6">
+      <nav className="flex md:flex-col gap-1">
+        <SettingsNavLink active={section === 'general'} onClick={() => setSection('general')}>
+          General
+        </SettingsNavLink>
+        <SettingsNavLink active={section === 'fields'} onClick={() => setSection('fields')}>
+          Fields
+        </SettingsNavLink>
+        <SettingsNavLink active={section === 'map'} onClick={() => setSection('map')}>
+          Map defaults
+        </SettingsNavLink>
+      </nav>
+      <div>
+        {section === 'general' && (
+          <SettingsGeneralSection collection={collection} onUpdate={onUpdate} />
+        )}
+        {section === 'fields' && (
+          <SettingsFieldsSection collection={collection} onUpdate={onUpdate} />
+        )}
+        {section === 'map' && <SettingsMapSection collection={collection} onUpdate={onUpdate} />}
+      </div>
+    </div>
+  )
+}
+
+function SettingsNavLink({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`text-left px-3 py-2 text-sm rounded-lg transition-colors ${
+        active ? 'bg-primary-50 text-primary-700 font-medium' : 'text-gray-700 hover:bg-gray-100'
+      }`}
+    >
+      {children}
+    </button>
+  )
+}
+
+function SaveButton({ saving }: { saving: boolean }) {
+  return (
+    <button
+      type="submit"
+      disabled={saving}
+      className="inline-flex items-center gap-1.5 bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-800 disabled:opacity-50 transition-colors"
+    >
+      <svg
+        className="w-4 h-4"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        strokeWidth={2}
+      >
+        <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+      </svg>
+      {saving ? 'Saving...' : 'Save'}
+    </button>
+  )
+}
+
+function SettingsGeneralSection({
   collection,
   onUpdate,
 }: {
@@ -888,16 +1000,135 @@ function SettingsView({
   const [description, setDescription] = useState(collection.description ?? '')
   const [attribution, setAttribution] = useState(collection.attribution ?? '')
   const [datetimeColumn, setDatetimeColumn] = useState(collection.datetime_column ?? '')
-  const [fields, setFields] = useState<FieldConfig[]>([])
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => {
     api.workspaces.list().then(setWorkspaces)
+    api.collections.schema(collection.id).then((data) => setColumns(data.columns))
+  }, [collection.id])
+
+  const dateColumns = columns.filter(
+    (c) =>
+      c.type.includes('timestamp') ||
+      c.type === 'date' ||
+      c.type === 'text' ||
+      c.type === 'character varying',
+  )
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSaving(true)
+    setError('')
+    setSaved(false)
+    try {
+      const updated = await api.collections.update(collection.id, {
+        workspace_id: workspaceId !== collection.workspace_id ? workspaceId : undefined,
+        description: description || null,
+        attribution: attribution || null,
+        datetime_column: datetimeColumn || null,
+      })
+      onUpdate(updated)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="max-w-2xl space-y-5">
+      <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-5">
+        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">General</h2>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Workspace</label>
+          <select
+            value={workspaceId}
+            onChange={(e) => setWorkspaceId(e.target.value)}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+          >
+            {workspaces.map((ws) => (
+              <option key={ws.id} value={ws.id}>
+                {ws.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={3}
+            placeholder="A short description of this collection"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Attribution</label>
+          <input
+            type="text"
+            value={attribution}
+            onChange={(e) => setAttribution(e.target.value)}
+            placeholder="e.g. OpenStreetMap contributors"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Datetime column</label>
+          <select
+            value={datetimeColumn}
+            onChange={(e) => setDatetimeColumn(e.target.value)}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+          >
+            <option value="">None</option>
+            {dateColumns.map((c) => (
+              <option key={c.column} value={c.column}>
+                {c.column} ({c.type})
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-gray-400 mt-1">
+            Enables the OGC <code>?datetime=</code> filter on this collection
+          </p>
+        </div>
+      </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      <div className="flex items-center gap-3">
+        <SaveButton saving={saving} />
+        {saved && <span className="text-sm text-green-600">Saved successfully</span>}
+      </div>
+    </form>
+  )
+}
+
+function SettingsFieldsSection({
+  collection,
+  onUpdate,
+}: {
+  collection: Collection
+  onUpdate: (c: Collection) => void
+}) {
+  const [fields, setFields] = useState<FieldConfig[]>([])
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
     api.collections.schema(collection.id).then((data) => {
-      setColumns(data.columns)
-      // Build field config from schema + existing exposed_fields
       const dataCols = data.columns.filter(
         (c) => c.column !== collection.geometry_column && c.column !== collection.id_column,
       )
@@ -916,14 +1147,6 @@ function SettingsView({
       }
     })
   }, [collection.id, collection.geometry_column, collection.id_column, collection.exposed_fields])
-
-  const dateColumns = columns.filter(
-    (c) =>
-      c.type.includes('timestamp') ||
-      c.type === 'date' ||
-      c.type === 'text' ||
-      c.type === 'character varying',
-  )
 
   const allEnabled = fields.every((f) => f.enabled)
   const noAliases = fields.every((f) => f.alias === f.source)
@@ -945,10 +1168,6 @@ function SettingsView({
               )
 
       const updated = await api.collections.update(collection.id, {
-        workspace_id: workspaceId !== collection.workspace_id ? workspaceId : undefined,
-        description: description || null,
-        attribution: attribution || null,
-        datetime_column: datetimeColumn || null,
         exposed_fields: exposedFields,
       })
       onUpdate(updated)
@@ -970,148 +1189,276 @@ function SettingsView({
   }
 
   return (
-    <form onSubmit={handleSubmit}>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        {/* Left column — general settings + save */}
-        <div className="self-start space-y-5">
-          <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-5">
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">General</h2>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Workspace</label>
-              <select
-                value={workspaceId}
-                onChange={(e) => setWorkspaceId(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-              >
-                {workspaces.map((ws) => (
-                  <option key={ws.id} value={ws.id}>
-                    {ws.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={3}
-                placeholder="A short description of this collection"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Attribution</label>
-              <input
-                type="text"
-                value={attribution}
-                onChange={(e) => setAttribution(e.target.value)}
-                placeholder="e.g. OpenStreetMap contributors"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Datetime column
-              </label>
-              <select
-                value={datetimeColumn}
-                onChange={(e) => setDatetimeColumn(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-              >
-                <option value="">None</option>
-                {dateColumns.map((c) => (
-                  <option key={c.column} value={c.column}>
-                    {c.column} ({c.type})
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-gray-400 mt-1">
-                Enables the OGC <code>?datetime=</code> filter on this collection
-              </p>
-            </div>
-          </div>
-
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
-              {error}
-            </div>
-          )}
-
-          <div className="flex items-center gap-3">
-            <button
-              type="submit"
-              disabled={saving}
-              className="inline-flex items-center gap-1.5 bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-800 disabled:opacity-50 transition-colors"
-            >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-              </svg>
-              {saving ? 'Saving...' : 'Save'}
-            </button>
-            {saved && <span className="text-sm text-green-600">Saved successfully</span>}
-          </div>
-        </div>
-
-        {/* Right column — exposed fields */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6 self-start">
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">
-            Exposed fields
-          </h2>
-          <p className="text-xs text-gray-400 mb-3">
-            Choose which columns are exposed in the API. Uncheck a column to hide it. Set an alias
-            to rename it in the API response.
-          </p>
-          {fields.length > 0 ? (
-            <div className="border border-gray-200 rounded-lg overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50">
-                  <tr className="border-b border-gray-200">
-                    <th className="text-left px-3 py-2 font-medium text-gray-600 w-10">On</th>
-                    <th className="text-left px-3 py-2 font-medium text-gray-600">Column</th>
-                    <th className="text-left px-3 py-2 font-medium text-gray-600">Alias</th>
+    <form onSubmit={handleSubmit} className="space-y-5">
+      <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">
+          Exposed fields
+        </h2>
+        <p className="text-xs text-gray-400 mb-3">
+          Choose which columns are exposed in the API. Uncheck a column to hide it. Set an alias to
+          rename it in the API response.
+        </p>
+        {fields.length > 0 ? (
+          <div className="border border-gray-200 rounded-lg overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr className="border-b border-gray-200">
+                  <th className="text-left px-3 py-2 font-medium text-gray-600 w-10">On</th>
+                  <th className="text-left px-3 py-2 font-medium text-gray-600">Column</th>
+                  <th className="text-left px-3 py-2 font-medium text-gray-600">Alias</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fields.map((f) => (
+                  <tr key={f.source} className="border-b border-gray-100 last:border-0">
+                    <td className="px-3 py-2">
+                      <input
+                        type="checkbox"
+                        checked={f.enabled}
+                        onChange={() => toggleField(f.source)}
+                        className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                      />
+                    </td>
+                    <td className="px-3 py-2 font-mono text-gray-700">{f.source}</td>
+                    <td className="px-3 py-2">
+                      <input
+                        type="text"
+                        value={f.alias}
+                        onChange={(e) => setAlias(f.source, e.target.value)}
+                        disabled={!f.enabled}
+                        className="w-full border border-gray-200 rounded px-2 py-1 text-sm disabled:opacity-40 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      />
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {fields.map((f) => (
-                    <tr key={f.source} className="border-b border-gray-100 last:border-0">
-                      <td className="px-3 py-2">
-                        <input
-                          type="checkbox"
-                          checked={f.enabled}
-                          onChange={() => toggleField(f.source)}
-                          className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                        />
-                      </td>
-                      <td className="px-3 py-2 font-mono text-gray-700">{f.source}</td>
-                      <td className="px-3 py-2">
-                        <input
-                          type="text"
-                          value={f.alias}
-                          onChange={(e) => setAlias(f.source, e.target.value)}
-                          disabled={!f.enabled}
-                          className="w-full border border-gray-200 rounded px-2 py-1 text-sm disabled:opacity-40 focus:outline-none focus:ring-1 focus:ring-primary-500"
-                        />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="animate-pulse h-20 bg-gray-100 rounded-lg" />
-          )}
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="animate-pulse h-20 bg-gray-100 rounded-lg" />
+        )}
+      </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+          {error}
         </div>
+      )}
+
+      <div className="flex items-center gap-3">
+        <SaveButton saving={saving} />
+        {saved && <span className="text-sm text-green-600">Saved successfully</span>}
+      </div>
+    </form>
+  )
+}
+
+function SettingsMapSection({
+  collection,
+  onUpdate,
+}: {
+  collection: Collection
+  onUpdate: (c: Collection) => void
+}) {
+  const persistedView = collectionDefaultView(collection)
+  const [lon, setLon] = useState<string>(persistedView ? String(persistedView.lon) : '')
+  const [lat, setLat] = useState<string>(persistedView ? String(persistedView.lat) : '')
+  const [zoom, setZoom] = useState<string>(persistedView ? String(persistedView.zoom) : '')
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState('')
+  const mapRef = useRef<maplibregl.Map | null>(null)
+
+  const collectionId = `${collection.workspace_name}:${collection.name}`
+
+  const captureCurrentView = () => {
+    const map = mapRef.current
+    if (!map) return
+    const c = map.getCenter()
+    setLon(c.lng.toFixed(6))
+    setLat(c.lat.toFixed(6))
+    setZoom(map.getZoom().toFixed(2))
+  }
+
+  const handleClear = () => {
+    setLon('')
+    setLat('')
+    setZoom('')
+    setError('')
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    setSaving(true)
+    setSaved(false)
+    try {
+      const allEmpty = !lon.trim() && !lat.trim() && !zoom.trim()
+      if (allEmpty) {
+        const updated = await api.collections.update(collection.id, {
+          default_center_lon: null,
+          default_center_lat: null,
+          default_zoom: null,
+        })
+        onUpdate(updated)
+        setSaved(true)
+        setTimeout(() => setSaved(false), 3000)
+        return
+      }
+      const lonN = parseFloat(lon)
+      const latN = parseFloat(lat)
+      const zoomN = parseFloat(zoom)
+      if (
+        Number.isNaN(lonN) ||
+        Number.isNaN(latN) ||
+        Number.isNaN(zoomN) ||
+        lonN < -180 ||
+        lonN > 180 ||
+        latN < -90 ||
+        latN > 90 ||
+        zoomN < 0 ||
+        zoomN > 24
+      ) {
+        setError('Invalid values: lon ∈ [-180, 180], lat ∈ [-90, 90], zoom ∈ [0, 24]')
+        return
+      }
+      const updated = await api.collections.update(collection.id, {
+        default_center_lon: lonN,
+        default_center_lat: latN,
+        default_zoom: zoomN,
+      })
+      onUpdate(updated)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-5">
+      <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
+        <div>
+          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">
+            Map defaults
+          </h2>
+          <p className="text-xs text-gray-400 mt-1">
+            Pan and zoom the map below to the desired starting view, then click{' '}
+            <em>Capture current view</em>. The Map and Style tabs will open directly on this view
+            instead of fitting to the bounding box. Clear all fields to fall back to the auto-fit
+            behaviour.
+          </p>
+        </div>
+
+        <MapView
+          collectionId={collectionId}
+          bbox={collection.bbox}
+          geometryType={collection.geometry_type}
+          style={collection.style}
+          defaultView={persistedView}
+          onMapReady={(m) => {
+            mapRef.current = m
+          }}
+        />
+
+        <div className="grid grid-cols-3 gap-3">
+          <div>
+            <label
+              htmlFor="map-default-lon"
+              className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1"
+            >
+              Longitude
+            </label>
+            <input
+              id="map-default-lon"
+              type="text"
+              value={lon}
+              onChange={(e) => setLon(e.target.value)}
+              placeholder="—"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+          <div>
+            <label
+              htmlFor="map-default-lat"
+              className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1"
+            >
+              Latitude
+            </label>
+            <input
+              id="map-default-lat"
+              type="text"
+              value={lat}
+              onChange={(e) => setLat(e.target.value)}
+              placeholder="—"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+          <div>
+            <label
+              htmlFor="map-default-zoom"
+              className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1"
+            >
+              Zoom
+            </label>
+            <input
+              id="map-default-zoom"
+              type="text"
+              value={zoom}
+              onChange={(e) => setZoom(e.target.value)}
+              placeholder="—"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={captureCurrentView}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={1.8}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
+              />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z"
+              />
+            </svg>
+            Capture current view
+          </button>
+          <button
+            type="button"
+            onClick={handleClear}
+            className="px-3 py-1.5 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
+          >
+            Clear
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      <div className="flex items-center gap-3">
+        <SaveButton saving={saving} />
+        {saved && <span className="text-sm text-green-600">Saved successfully</span>}
       </div>
     </form>
   )
@@ -1641,6 +1988,7 @@ function StyleView({
           bbox={collection.bbox}
           geometryType={collection.geometry_type}
           style={previewStyle}
+          defaultView={collectionDefaultView(collection)}
         />
       </div>
     </div>

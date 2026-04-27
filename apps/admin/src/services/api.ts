@@ -57,6 +57,9 @@ export interface Collection {
   datetime_column: string | null
   exposed_fields: Array<{ source: string; alias?: string }> | null
   style: StyleConfig | null
+  default_center_lon: number | null
+  default_center_lat: number | null
+  default_zoom: number | null
   srid: number
   bbox: string | null
   feature_count: number | null
