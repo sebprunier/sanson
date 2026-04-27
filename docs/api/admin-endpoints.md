@@ -85,18 +85,28 @@ All fields are optional — only provided fields are updated.
   "description": "Updated description",
   "attribution": "© OpenStreetMap contributors",
   "datetime_column": "date_created",
-  "exposed_fields": [{ "source": "name", "alias": "city" }, { "source": "population" }]
+  "exposed_fields": [{ "source": "name", "alias": "city" }, { "source": "population" }],
+  "style": { "type": "single", "fill_color": "#1B4F72", "fill_opacity": 0.3 },
+  "default_center_lon": 2.35,
+  "default_center_lat": 48.85,
+  "default_zoom": 12.5
 }
 ```
 
-| Field             | Type           | Description                                                          |
-| ----------------- | -------------- | -------------------------------------------------------------------- |
-| `workspace_id`    | string         | Move the collection to a different workspace                         |
-| `name`            | string         | Rename the collection                                                |
-| `description`     | string \| null | Collection description (set to `null` to clear)                      |
-| `attribution`     | string \| null | Data attribution text                                                |
-| `datetime_column` | string \| null | Column to use for OGC `?datetime=` temporal filtering                |
-| `exposed_fields`  | array \| null  | Columns to expose in the API (see [Exposed Fields](#exposed-fields)) |
+| Field                | Type           | Description                                                            |
+| -------------------- | -------------- | ---------------------------------------------------------------------- |
+| `workspace_id`       | string         | Move the collection to a different workspace                           |
+| `name`               | string         | Rename the collection                                                  |
+| `description`        | string \| null | Collection description (set to `null` to clear)                        |
+| `attribution`        | string \| null | Data attribution text                                                  |
+| `datetime_column`    | string \| null | Column to use for OGC `?datetime=` temporal filtering                  |
+| `exposed_fields`     | array \| null  | Columns to expose in the API (see [Exposed Fields](#exposed-fields))   |
+| `style`              | object \| null | Render style configuration (see [Collection Style](#collection-style)) |
+| `default_center_lon` | number \| null | Default map center longitude in WGS84 (`-180`–`180`)                   |
+| `default_center_lat` | number \| null | Default map center latitude in WGS84 (`-90`–`90`)                      |
+| `default_zoom`       | number \| null | Default map zoom (`0`–`24`, decimals supported)                        |
+
+When all three `default_center_lon`, `default_center_lat`, `default_zoom` are set, the admin UI Map and Style tabs open directly on that view. Set them to `null` to fall back to auto-fit on the collection bounding box.
 
 ### Export collection data
 
@@ -104,7 +114,18 @@ All fields are optional — only provided fields are updated.
 GET /api/admin/collections/{id}/export
 ```
 
-Downloads the full collection as a GeoJSON file. The response includes a `Content-Disposition` header for file download. If `exposed_fields` is configured, only those columns are included in the export.
+Downloads the full collection. The response includes a `Content-Disposition` header for browser download. If `exposed_fields` is configured, only those columns are included in the export.
+
+**Query parameters:**
+
+| Param    | Type   | Description                                         |
+| -------- | ------ | --------------------------------------------------- |
+| `format` | string | `geojson` (default) or `csv`                        |
+| `filter` | string | CQL2 text filter (same syntax as `/items?filter=`)  |
+| `bbox`   | string | Bounding box `minLon,minLat,maxLon,maxLat` in WGS84 |
+| `limit`  | number | Maximum number of features to return                |
+
+`format=geojson` returns an `application/geo+json` FeatureCollection. `format=csv` returns `text/csv;charset=utf-8` with one header row (`id`, the exposed property names, and `geom_wkt`) followed by one row per feature; `geom_wkt` holds the geometry as WKT in EPSG:4326.
 
 ### Delete a collection
 
@@ -290,7 +311,7 @@ Exposed fields filtering applies to:
 - **Single feature** (`/collections/{id}/items/{fid}`) — same filtering
 - **Queryables** (`/collections/{id}/queryables`) — only exposed columns are listed as filterable
 - **Vector tiles** (`/collections/{id}/tiles/{z}/{x}/{y}.pbf`) — MVT properties reflect exposed fields
-- **Export** (`/api/admin/collections/{id}/export`) — GeoJSON export respects the configuration
+- **Export** (`/api/admin/collections/{id}/export`) — both GeoJSON and CSV outputs respect the configuration
 
 ## Collection Style
 

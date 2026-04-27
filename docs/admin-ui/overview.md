@@ -27,28 +27,24 @@ Browse and manage your geographic collections:
 
 ### Collection detail
 
-The collection detail page has six tabs:
+The collection detail page has seven tabs, in order: **Map**, **Data**, **Schema**, **Style**, **Settings**, **API**, **History**.
 
 **Map** — interactive map powered by MapLibre GL JS with vector tile rendering. Features:
 
-- Auto-zoom to collection extent (fitBounds) on load
+- Opens directly on the configured **Map default view** (Settings → Map defaults) when one is set; otherwise auto-zooms to the collection extent (`fitBounds`)
 - **Fit bounds button** (top-left) to re-center the map on the collection extent
-- **Basemap switcher** (top-left) with three options: OSM (default), Light (CartoDB grayscale), Satellite (Esri World Imagery)
+- **Basemap switcher** (top-left) with three options: Light (CartoDB grayscale, default), OSM (OpenStreetMap), Satellite (Esri World Imagery)
 - Feature inspection on click (popup with all properties)
 - Legend overlay when a style is configured
 
-**Table** — tabular display of features with column sorting. Features are loaded with pagination.
+**Data** — tabular browser with live filters and a built-in exporter:
+
+- **CQL2 filter** and **bounding box** inputs (WGS84 lon/lat) applied together; the table updates to show what matches
+- "Showing X of Y features" counter, with a `— filtered` hint when filters are active
+- **Export** dropdown (top-right): choose GeoJSON or CSV format and an optional limit, then download. The export reuses the active CQL2 + bbox filters, so what you see is what you export.
+- Pagination through the matched features
 
 **Schema** — lists all columns in the collection's data table with their PostgreSQL types and basic statistics (distinct values, null count).
-
-**History** — import history for the collection, showing date, source file, status, progress, feature count, and duration.
-
-**Settings** — configure the collection's metadata and API behavior:
-
-- **Workspace** — move the collection to a different workspace
-- **Description** and **Attribution** — free-text metadata
-- **Datetime column** — select which column to use for OGC `?datetime=` temporal filtering
-- **Exposed fields** — choose which columns are visible in the OGC API, with optional aliases. See [Exposed Fields](/api/admin-endpoints#exposed-fields).
 
 **Style** — configure how the collection is rendered on the map:
 
@@ -61,7 +57,15 @@ The collection detail page has six tabs:
 - Fill opacity slider
 - Live map preview alongside the editor
 
-A **Export GeoJSON** button in the collection header exports the full dataset as a GeoJSON file.
+**Settings** — collection metadata and API behaviour. The tab has a left sidebar with three sections, each with its own Save button:
+
+- **General** — Workspace (move the collection), Description, Attribution, Datetime column (the column that drives the OGC `?datetime=` filter)
+- **Fields** — choose which columns are exposed in the OGC API, with optional aliases. See [Exposed Fields](/api/admin-endpoints#exposed-fields).
+- **Map defaults** — pick a default center and zoom level for the Map and Style tabs. The interactive map plus the **Capture current view** button records the camera; clear the three values to fall back to `fitBounds`.
+
+**API** — copy-paste curl examples for every endpoint of the collection (metadata, queryables, items, single feature, vector tile), with placeholders pre-filled for this collection. Buttons to export the full set as a Postman or Bruno collection.
+
+**History** — import history for the collection: date, source file, status, progress, feature count, duration.
 
 ## Data Import
 
