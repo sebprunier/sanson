@@ -18,7 +18,7 @@ Sanson is an open source geospatial server whose goal is to expose geographic da
 
 Founding principle: do one thing, do it well. Sanson is a geographic data publishing tool — not an API management tool, not a data processing tool, not an environment management tool.
 
-**Conformance goal:** Sanson implements a subset of **OGC API — Features** (Parts 1, 2, and 3), targeting full conformance with the Core, GeoJSON, and CQL2 Text conformance classes. This ensures native compatibility with standard GIS clients (QGIS, ArcGIS, FME…) without any special configuration.
+**Conformance goal:** Sanson implements a subset of **OGC API — Features** (Parts 1, 2, and 3), targeting full conformance with the Core, GeoJSON and CQL2 conformance classes (Text, JSON, Basic, Advanced Comparison, Spatial, Temporal). This ensures native compatibility with standard GIS clients (QGIS, ArcGIS, FME…) without any special configuration.
 
 ---
 
@@ -301,9 +301,9 @@ This pattern (from auxalentours-api) avoids a second round trip to the database 
 | **CQL2 Basic**               | `http://www.opengis.net/spec/cql2/1.0/req/basic-cql2`                    | V1     |
 | **CQL2 Basic Spatial**       | `http://www.opengis.net/spec/cql2/1.0/req/basic-spatial-operators`       | V1     |
 | **CQL2 Advanced Comparison** | `http://www.opengis.net/spec/cql2/1.0/req/advanced-comparison-operators` | V1     |
-| **CQL2 JSON**                | `http://www.opengis.net/spec/cql2/1.0/req/cql2-json`                     | V2     |
-| **CQL2 Temporal**            | `http://www.opengis.net/spec/cql2/1.0/req/temporal-operators`            | V2     |
-| **CQL2 Spatial** (full)      | `http://www.opengis.net/spec/cql2/1.0/req/spatial-operators`             | V2     |
+| **CQL2 JSON**                | `http://www.opengis.net/spec/cql2/1.0/req/cql2-json`                     | V1     |
+| **CQL2 Temporal**            | `http://www.opengis.net/spec/cql2/1.0/req/temporal-operators`            | V1     |
+| **CQL2 Spatial** (full)      | `http://www.opengis.net/spec/cql2/1.0/req/spatial-operators`             | V1     |
 | **CRS by Reference**         | `http://www.opengis.net/spec/ogcapi-features-2/1.0/conf/crs`             | V1     |
 
 ### OGC URL mapping
@@ -793,17 +793,13 @@ sanson/
 
 ## 12. Planned evolutions (beyond V1)
 
-| Topic               | Description                                                         |
-| ------------------- | ------------------------------------------------------------------- |
-| Object storage      | Replace local storage with S3-compatible storage for uploaded files |
-| Import formats      | GeoPackage                                                          |
-| Export formats      | GeoPackage, Shapefile (in addition to GeoJSON and CSV)              |
-| CQL2 JSON           | JSON format support for CQL2 filters (`filter-lang=cql2-json`)      |
-| CQL2 Temporal       | Full temporal filters (`T_AFTER`, `T_BEFORE`, `T_DURING`…)          |
-| CQL2 Spatial (full) | All spatial operators (`S_CROSSES`, `S_OVERLAPS`, `S_TOUCHES`…)     |
-| Output formats      | CSV and GeoPackage in addition to GeoJSON                           |
-| Tile caching        | MVT tile caching for improved performance                           |
-| OGC API Tiles       | OGC API — Tiles standard conformance                                |
-| Collection groups   | Combine multiple collections in a single response                   |
-| Webhooks            | External notification at the end of an ingestion job                |
-| Geo simplification  | Geometry simplification at import via mapshaper                     |
+| Topic              | Description                                                         |
+| ------------------ | ------------------------------------------------------------------- |
+| Object storage     | Replace local storage with S3-compatible storage for uploaded files |
+| Import formats     | GeoPackage                                                          |
+| Export formats     | GeoPackage, Shapefile (in addition to GeoJSON and CSV)              |
+| Tile caching       | MVT tile caching for improved performance                           |
+| OGC API Tiles      | OGC API — Tiles standard conformance                                |
+| Collection groups  | Combine multiple collections in a single response                   |
+| Webhooks           | External notification at the end of an ingestion job                |
+| Geo simplification | Geometry simplification at import via mapshaper                     |
