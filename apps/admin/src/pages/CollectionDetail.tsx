@@ -207,13 +207,24 @@ function MapView({
 }) {
   const mapContainer = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
-  const [basemap, setBasemap] = useState<BasemapId>('osm')
+  const [basemap, setBasemap] = useState<BasemapId>('light')
 
   const layerName = collectionId.includes(':') ? collectionId.split(':')[1] : collectionId
 
-  useEffect(() => {
-    if (!mapContainer.current || mapRef.current) return
+  // Refs so the create-once effect can read the latest props without re-running
+  const styleRef = useRef(style)
+  const bboxRef = useRef(bbox)
+  const geometryTypeRef = useRef(geometryType)
+  styleRef.current = style
+  bboxRef.current = bbox
+  geometryTypeRef.current = geometryType
 
+  // Create the map once per collection. Style/bbox updates are handled by the
+  // dedicated effects below so the user's pan/zoom/basemap survive style edits.
+  useEffect(() => {
+    if (!mapContainer.current) return
+
+    const initialBasemap = BASEMAPS.light
     const map = new maplibregl.Map({
       container: mapContainer.current,
       style: {
@@ -221,9 +232,9 @@ function MapView({
         sources: {
           basemap: {
             type: 'raster',
-            tiles: BASEMAPS.osm.tiles as unknown as string[],
+            tiles: initialBasemap.tiles as unknown as string[],
             tileSize: 256,
-            attribution: BASEMAPS.osm.attribution,
+            attribution: initialBasemap.attribution,
           },
         },
         layers: [{ id: 'basemap', type: 'raster', source: 'basemap' }],
@@ -242,8 +253,8 @@ function MapView({
         maxzoom: 14,
       })
 
-      applyMapStyle(map, layerName, geometryType, style ?? null)
-      fitToBbox(map, bbox)
+      applyMapStyle(map, layerName, geometryTypeRef.current, styleRef.current ?? null)
+      fitToBbox(map, bboxRef.current)
 
       map.on('click', (e) => {
         const collectionIds = ['features-circle', 'features-fill', 'features-line'].filter((lid) =>
@@ -265,26 +276,39 @@ function MapView({
       map.remove()
       mapRef.current = null
     }
-  }, [collectionId, bbox, geometryType, layerName, style])
+  }, [collectionId, layerName])
+
+  // Re-apply feature layer style when it changes, without recreating the map
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    const apply = () => applyMapStyle(map, layerName, geometryType, style ?? null)
+    if (map.isStyleLoaded()) apply()
+    else map.once('load', apply)
+  }, [style, geometryType, layerName])
 
   // Switch basemap tiles when selection changes
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !map.isStyleLoaded()) return
-    const bm = BASEMAPS[basemap]
-    map.removeLayer('basemap')
-    map.removeSource('basemap')
-    map.addSource('basemap', {
-      type: 'raster',
-      tiles: bm.tiles as unknown as string[],
-      tileSize: 256,
-      attribution: bm.attribution,
-    })
-    // Insert basemap below all feature layers
-    const firstFeatureLayer = ['features-fill', 'features-line', 'features-circle'].find((lid) =>
-      map.getLayer(lid),
-    )
-    map.addLayer({ id: 'basemap', type: 'raster', source: 'basemap' }, firstFeatureLayer)
+    if (!map) return
+    const apply = () => {
+      const bm = BASEMAPS[basemap]
+      if (map.getLayer('basemap')) map.removeLayer('basemap')
+      if (map.getSource('basemap')) map.removeSource('basemap')
+      map.addSource('basemap', {
+        type: 'raster',
+        tiles: bm.tiles as unknown as string[],
+        tileSize: 256,
+        attribution: bm.attribution,
+      })
+      // Insert basemap below all feature layers
+      const firstFeatureLayer = ['features-fill', 'features-line', 'features-circle'].find((lid) =>
+        map.getLayer(lid),
+      )
+      map.addLayer({ id: 'basemap', type: 'raster', source: 'basemap' }, firstFeatureLayer)
+    }
+    if (map.isStyleLoaded()) apply()
+    else map.once('load', apply)
   }, [basemap])
 
   return (
@@ -1595,6 +1619,7 @@ function DownloadSmallIcon() {
 
 const EXPORT_FORMATS = [
   { value: 'geojson', label: 'GeoJSON', extension: '.geojson', mime: 'application/geo+json' },
+  { value: 'csv', label: 'CSV', extension: '.csv', mime: 'text/csv;charset=utf-8' },
 ] as const
 
 type ExportFormat = (typeof EXPORT_FORMATS)[number]['value']
@@ -1626,20 +1651,30 @@ function ExportView({ collection }: { collection: Collection }) {
         params.limit = n
       }
 
-      const url = api.collections.exportUrl(collection.id, params)
+      const fmt = EXPORT_FORMATS.find((f) => f.value === format) ?? EXPORT_FORMATS[0]
+      const url = api.collections.exportUrl(collection.id, { ...params, format })
       const res = await fetch(url)
       if (!res.ok) {
         const body = await res.json().catch(() => null)
         throw new Error(body?.message ?? `HTTP ${res.status}`)
       }
 
-      const data = await res.json()
-      const count = data.features?.length ?? 0
+      let blob: Blob
+      let count: number
+      if (format === 'geojson') {
+        const data = await res.json()
+        count = data.features?.length ?? 0
+        blob = new Blob([JSON.stringify(data, null, 2)], { type: fmt.mime })
+      } else {
+        const text = await res.text()
+        const lines = text.split(/\r\n|\r|\n/).filter((l) => l.length > 0)
+        count = Math.max(0, lines.length - 1)
+        blob = new Blob([text], { type: fmt.mime })
+      }
 
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/geo+json' })
       const a = document.createElement('a')
       a.href = URL.createObjectURL(blob)
-      a.download = `${collection.workspace_name}_${collection.name}.geojson`
+      a.download = `${collection.workspace_name}_${collection.name}${fmt.extension}`
       a.click()
       URL.revokeObjectURL(a.href)
 

@@ -572,11 +572,11 @@ export async function adminCollectionsRoutes(
   // GET /api/admin/collections/:id/export
   app.get<{
     Params: { id: string }
-    Querystring: { filter?: string; bbox?: string; limit?: string }
+    Querystring: { filter?: string; bbox?: string; limit?: string; format?: string }
   }>('/api/admin/collections/:id/export', {
     schema: {
       tags: ['Admin'],
-      summary: 'Export collection as GeoJSON file',
+      summary: 'Export collection as GeoJSON or CSV file',
       params: {
         type: 'object',
         properties: { id: { type: 'string' } },
@@ -591,10 +591,16 @@ export async function adminCollectionsRoutes(
             description: 'Bounding box filter: minLon,minLat,maxLon,maxLat',
           },
           limit: { type: 'string', description: 'Maximum number of features to export' },
+          format: {
+            type: 'string',
+            enum: ['geojson', 'csv'],
+            description: 'Output format (default: geojson)',
+          },
         },
       },
     },
     handler: async (request, reply) => {
+      const format = request.query.format === 'csv' ? 'csv' : 'geojson'
       const { rows: collectionRows } = await options.db.query<CollectionRow>(
         `${COLLECTION_SELECT} WHERE c.id = $1`,
         [request.params.id],
@@ -648,6 +654,62 @@ export async function adminCollectionsRoutes(
           : `ST_Transform(${collection.geometry_column}, 4326)`
 
       const propsExpr = buildExportPropertiesExpr(collection)
+
+      if (format === 'csv') {
+        const { rows: csvRows } = await options.db.query<{
+          id: number
+          geom_wkt: string | null
+          properties: Record<string, unknown>
+        }>(
+          `SELECT ${collection.id_column} AS id,
+                  ST_AsText(${geomExpr}) AS geom_wkt,
+                  ${propsExpr} AS properties
+           FROM ${collection.table_name} t
+           ${whereClause}
+           ORDER BY ${collection.id_column}
+           ${limitClause}`,
+          params,
+        )
+
+        let propertyKeys: string[] = []
+        if (csvRows.length > 0) {
+          propertyKeys = Object.keys(csvRows[0].properties ?? {})
+        } else if (collection.exposed_fields && collection.exposed_fields.length > 0) {
+          propertyKeys = collection.exposed_fields.map((f) => f.alias ?? f.source)
+        } else {
+          const { rows: colRows } = await options.db.query<{ column_name: string }>(
+            `SELECT column_name FROM information_schema.columns
+             WHERE table_name = $1
+               AND column_name <> $2
+               AND column_name <> $3
+             ORDER BY ordinal_position`,
+            [collection.table_name, collection.id_column, collection.geometry_column],
+          )
+          propertyKeys = colRows.map((r) => r.column_name)
+        }
+
+        const headers = ['id', ...propertyKeys, 'geom_wkt']
+        const escape = (val: unknown): string => {
+          if (val === null || val === undefined) return ''
+          const s = typeof val === 'object' ? JSON.stringify(val) : String(val)
+          return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+        }
+
+        const lines: string[] = [headers.map(escape).join(',')]
+        for (const row of csvRows) {
+          const cells: string[] = [escape(row.id)]
+          for (const key of propertyKeys) cells.push(escape(row.properties?.[key]))
+          cells.push(escape(row.geom_wkt))
+          lines.push(cells.join(','))
+        }
+        const csv = lines.join('\r\n') + '\r\n'
+
+        const filename = `${collection.workspace_name}_${collection.name}.csv`
+        reply.header('Content-Type', 'text/csv; charset=utf-8')
+        reply.header('Content-Disposition', `attachment; filename="${filename}"`)
+        return csv
+      }
+
       const { rows: features } = await options.db.query<{
         id: number
         geojson: object
