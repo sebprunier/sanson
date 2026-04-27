@@ -32,7 +32,7 @@ interface ItemsResponse {
   features: GeoJsonFeature[]
 }
 
-const TABS = ['map', 'data', 'schema', 'history', 'settings', 'style', 'api'] as const
+const TABS = ['map', 'data', 'schema', 'style', 'settings', 'api', 'history'] as const
 type Tab = (typeof TABS)[number]
 
 function isTab(value: string | undefined): value is Tab {
@@ -91,17 +91,17 @@ export function CollectionDetail() {
         <TabButton active={tab === 'schema'} onClick={() => setTab('schema')}>
           Schema
         </TabButton>
-        <TabButton active={tab === 'history'} onClick={() => setTab('history')}>
-          History
+        <TabButton active={tab === 'style'} onClick={() => setTab('style')}>
+          Style
         </TabButton>
         <TabButton active={tab === 'settings'} onClick={() => setTab('settings')}>
           Settings
         </TabButton>
-        <TabButton active={tab === 'style'} onClick={() => setTab('style')}>
-          Style
-        </TabButton>
         <TabButton active={tab === 'api'} onClick={() => setTab('api')}>
           API
+        </TabButton>
+        <TabButton active={tab === 'history'} onClick={() => setTab('history')}>
+          History
         </TabButton>
       </div>
 
