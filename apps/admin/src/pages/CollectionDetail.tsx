@@ -291,10 +291,17 @@ function MapView({
         const features = map.queryRenderedFeatures(e.point, { layers: collectionIds })
         if (features.length === 0) return
         const props = features[0].properties
-        const html = Object.entries(props)
-          .map(([k, v]) => `<strong>${k}</strong>: ${v}`)
-          .join('<br/>')
-        new maplibregl.Popup().setLngLat(e.lngLat).setHTML(html).addTo(map)
+        const escape = (s: string) =>
+          s
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+        const rows = Object.entries(props)
+          .map(([k, v]) => `<div><strong>${escape(k)}</strong>: ${escape(String(v ?? ''))}</div>`)
+          .join('')
+        const html = `<div style="max-height:280px;overflow-y:auto;overflow-wrap:anywhere;">${rows}</div>`
+        new maplibregl.Popup({ maxWidth: '320px' }).setLngLat(e.lngLat).setHTML(html).addTo(map)
       })
     })
 
