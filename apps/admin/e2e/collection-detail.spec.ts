@@ -79,4 +79,90 @@ test.describe('Collection Detail', () => {
     await expect(page.getByText(/\d+ import/)).toBeVisible()
     await expect(page.getByText('completed')).toBeVisible()
   })
+
+  test('Settings tab has General, Fields and Map defaults sub-nav', async ({ page }) => {
+    await goToCollectionDetail(page)
+    await page.getByRole('button', { name: 'Settings', exact: true }).click()
+
+    // Sub-nav buttons present
+    await expect(page.getByRole('button', { name: 'General', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Fields', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Map defaults', exact: true })).toBeVisible()
+
+    // General is the default section
+    await expect(page.getByRole('heading', { name: 'General' })).toBeVisible()
+
+    // Switch to Fields
+    await page.getByRole('button', { name: 'Fields', exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'Exposed fields' })).toBeVisible()
+
+    // Switch to Map defaults
+    await page.getByRole('button', { name: 'Map defaults', exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'Map defaults' })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Capture current view/ })).toBeVisible()
+  })
+
+  test('Map defaults persist after save and reload', async ({ page }) => {
+    await goToCollectionDetail(page)
+    await page.getByRole('button', { name: 'Settings', exact: true }).click()
+    await page.getByRole('button', { name: 'Map defaults', exact: true }).click()
+
+    // Fill values manually (avoids relying on map readiness for capture).
+    // exact: true is needed for "Zoom" because MapLibre adds Zoom in / Zoom out
+    // buttons whose accessible names also start with "Zoom".
+    await page.getByLabel('Longitude', { exact: true }).fill('2.35')
+    await page.getByLabel('Latitude', { exact: true }).fill('48.85')
+    await page.getByLabel('Zoom', { exact: true }).fill('10')
+
+    await page.getByRole('button', { name: 'Save', exact: true }).click()
+    await expect(page.getByText('Saved successfully')).toBeVisible()
+
+    // Reload the page and confirm values are persisted
+    await page.reload()
+    await page.getByRole('button', { name: 'Settings', exact: true }).click()
+    await page.getByRole('button', { name: 'Map defaults', exact: true }).click()
+    await expect(page.getByLabel('Longitude', { exact: true })).toHaveValue('2.35')
+    await expect(page.getByLabel('Latitude', { exact: true })).toHaveValue('48.85')
+    await expect(page.getByLabel('Zoom', { exact: true })).toHaveValue('10')
+
+    // Reset so the test is idempotent across runs
+    await page.getByRole('button', { name: 'Clear', exact: true }).click()
+    await page.getByRole('button', { name: 'Save', exact: true }).click()
+    await expect(page.getByText('Saved successfully')).toBeVisible()
+  })
+
+  test('Data tab bbox filter applies to the table', async ({ page }) => {
+    await goToCollectionDetail(page)
+    await page.getByRole('button', { name: 'Data', exact: true }).click()
+    await expect(page.getByText(/Showing \d+ of \d+ features/)).toBeVisible()
+
+    await page.getByPlaceholder(/bbox/).fill('-1,42,2,46')
+    await page.getByRole('button', { name: 'Filter' }).click()
+
+    await expect(page.getByText('— filtered')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Clear' }).click()
+    await expect(page.getByText('— filtered')).not.toBeVisible()
+  })
+
+  test('Data tab Export downloads CSV with active filters', async ({ page }) => {
+    await goToCollectionDetail(page)
+    await page.getByRole('button', { name: 'Data', exact: true }).click()
+
+    // Open the Export popover
+    await page.getByRole('button', { name: /Export/ }).click()
+    await expect(page.getByRole('button', { name: 'CSV', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'GeoJSON', exact: true })).toBeVisible()
+
+    await page.getByRole('button', { name: 'CSV', exact: true }).click()
+
+    // Click Download and intercept the export request
+    const responsePromise = page.waitForResponse(
+      (r) => r.url().includes('/export') && r.url().includes('format=csv'),
+    )
+    await page.getByRole('button', { name: 'Download', exact: true }).click()
+    const response = await responsePromise
+    expect(response.status()).toBe(200)
+    expect(response.headers()['content-type']).toContain('text/csv')
+  })
 })
