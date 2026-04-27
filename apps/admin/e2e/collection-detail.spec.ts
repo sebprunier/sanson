@@ -19,11 +19,12 @@ test.describe('Collection Detail', () => {
   test('shows collection info and all tabs', async ({ page }) => {
     await goToCollectionDetail(page)
     await expect(page.getByRole('button', { name: 'Map', exact: true })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Table', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Data', exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Schema', exact: true })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'History', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Style', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Settings', exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: 'API', exact: true })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Export', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'History', exact: true })).toBeVisible()
   })
 
   test('API tab shows curl examples with copy buttons', async ({ page }) => {
@@ -37,19 +38,21 @@ test.describe('Collection Detail', () => {
     await expect(page.getByRole('button', { name: 'Copy' }).first()).toBeVisible()
   })
 
-  test('table tab shows features and filter input', async ({ page }) => {
+  test('Data tab shows features, filter input and Export button', async ({ page }) => {
     await goToCollectionDetail(page)
-    await page.getByRole('button', { name: 'Table', exact: true }).click()
-    await expect(page.getByPlaceholder('CQL2 filter')).toBeVisible()
+    await page.getByRole('button', { name: 'Data', exact: true }).click()
+    await expect(page.getByPlaceholder("CQL2 filter, e.g. name='Paris'")).toBeVisible()
+    await expect(page.getByPlaceholder(/bbox/)).toBeVisible()
     await expect(page.getByText(/Showing \d+ of \d+ features/)).toBeVisible()
+    await expect(page.getByRole('button', { name: /Export/ })).toBeVisible()
   })
 
-  test('CQL2 filter works in table view', async ({ page }) => {
+  test('CQL2 filter works in Data view', async ({ page }) => {
     await goToCollectionDetail(page)
-    await page.getByRole('button', { name: 'Table', exact: true }).click()
+    await page.getByRole('button', { name: 'Data', exact: true }).click()
     await expect(page.getByText(/Showing \d+ of \d+ features/)).toBeVisible()
 
-    const filterInput = page.getByPlaceholder('CQL2 filter')
+    const filterInput = page.getByPlaceholder("CQL2 filter, e.g. name='Paris'")
     await filterInput.fill("departement='GIRONDE'")
     await page.getByRole('button', { name: 'Filter' }).click()
 

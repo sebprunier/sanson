@@ -797,7 +797,7 @@ sanson/
 | ------------------- | ------------------------------------------------------------------- |
 | Object storage      | Replace local storage with S3-compatible storage for uploaded files |
 | Import formats      | GeoPackage                                                          |
-| Export formats      | CSV, GeoPackage, Shapefile (in addition to GeoJSON)                 |
+| Export formats      | GeoPackage, Shapefile (in addition to GeoJSON and CSV)              |
 | CQL2 JSON           | JSON format support for CQL2 filters (`filter-lang=cql2-json`)      |
 | CQL2 Temporal       | Full temporal filters (`T_AFTER`, `T_BEFORE`, `T_DURING`…)          |
 | CQL2 Spatial (full) | All spatial operators (`S_CROSSES`, `S_OVERLAPS`, `S_TOUCHES`…)     |

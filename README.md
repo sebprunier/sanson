@@ -111,7 +111,7 @@ POST /api/admin/import                       Import a data file (GeoJSON, CSV, S
 POST /api/admin/import/preview               Preview a file before importing (metadata, sample data, map)
 GET  /api/admin/jobs                         List import jobs (status, progress, history)
 GET  /api/admin/jobs/:id                     Get a specific job status
-GET  /api/admin/collections/:id/export            Export collection as GeoJSON
+GET  /api/admin/collections/:id/export            Export collection as GeoJSON or CSV (?format=)
 GET  /api/admin/collections/:id/classify          Auto-classify a column for styling
 ```
 
