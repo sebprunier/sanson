@@ -1,0 +1,34 @@
+# Build artefacts that the Dockerfile rebuilds itself
+**/node_modules
+**/dist
+**/.vitepress/cache
+**/.vitepress/dist
+**/test-results
+**/playwright-report
+**/coverage
+**/.turbo
+
+# VCS / IDE / local
+.git
+.gitignore
+.github
+.vscode
+.idea
+.DS_Store
+
+# Env / secrets
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test data and runtime artefacts
+data
+uploads
+docker
+
+# Docs site (built and served separately)
+docs

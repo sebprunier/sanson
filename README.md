@@ -117,6 +117,63 @@ GET  /api/admin/collections/:id/classify          Auto-classify a column for sty
 
 ---
 
+## Deployment
+
+A production-ready Docker image is published on every push to `main`
+(`:edge`, `:sha-<short>`) and on every `v*` tag (`:0.1.0`, `:0.1`, `:latest`):
+
+```
+ghcr.io/sebprunier/sanson
+```
+
+The image embeds the API server, the worker, and the static admin UI. A
+single environment variable, `NODE_MODE`, decides what the container
+runs:
+
+| `NODE_MODE` | What runs                                                    |
+| ----------- | ------------------------------------------------------------ |
+| `all`       | HTTP server + ingestion worker in the same process (default) |
+| `api`       | HTTP server only — pair with one or more `worker` nodes      |
+| `worker`    | Ingestion worker only — no HTTP listener                     |
+
+### Quickstart with Docker Compose
+
+A reference `docker/compose.prod.yml` shows the canonical multi-node
+setup (one `api`, one `worker`, one `db`):
+
+```bash
+IMAGE=ghcr.io/sebprunier/sanson:edge \
+  docker compose -f docker/compose.prod.yml up -d
+```
+
+The compose file mounts a shared `uploads` volume between the API and
+the worker; both processes need the same file tree until the S3
+backend ships ([#7](https://github.com/sebprunier/sanson/issues/7)).
+For a single-node "all-in-one" deployment, an alternative service is
+commented out in the same file.
+
+### Image essentials
+
+- Base: `node:24-bookworm-slim` + `gdal-bin` (required by `ogr2ogr` for
+  Shapefile / GeoPackage imports)
+- Runs as the unprivileged `node` user
+- `EXPOSE 3000`
+- `HEALTHCHECK` hits `/health` every 30s
+- The static admin UI is served at `/admin/` when `ADMIN_UI_DIR` is set
+  (defaulted in the image)
+
+### Environment variables
+
+| Variable       | Default         | Notes                                            |
+| -------------- | --------------- | ------------------------------------------------ |
+| `DATABASE_URL` | _(required)_    | PostgreSQL/PostGIS connection string             |
+| `NODE_MODE`    | `all`           | `api`, `worker`, or `all`                        |
+| `PORT`         | `3000`          | HTTP port (ignored in worker-only mode)          |
+| `UPLOAD_DIR`   | `/app/uploads`  | Where uploaded files are staged before ingestion |
+| `ADMIN_UI_DIR` | `/app/admin-ui` | Set to empty to disable serving the admin UI     |
+
+---
+
 ## Development
 
 ### Monorepo structure

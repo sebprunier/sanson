@@ -74,7 +74,12 @@ try {
   console.log(`pg-boss started (schema: pgboss)`)
 
   if (nodeMode === 'api' || nodeMode === 'all') {
-    const app = buildApp(db, { logger: true, boss, maxFileSizeMb })
+    const app = buildApp(db, {
+      logger: true,
+      boss,
+      maxFileSizeMb,
+      adminUiDir: process.env.ADMIN_UI_DIR,
+    })
     app.addHook('onClose', async () => {
       await boss.stop({ graceful: true })
     })

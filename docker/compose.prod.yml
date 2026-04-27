@@ -1,0 +1,87 @@
+# Production-ish Compose example for Sanson.
+#
+# Demonstrates the canonical multi-node deployment: one API node, one
+# worker node, one Postgres+PostGIS node, all sharing the same image.
+# `NODE_MODE` selects what each replica runs.
+#
+# Usage:
+#   IMAGE=ghcr.io/sebprunier/sanson:edge docker compose -f docker/compose.prod.yml up -d
+#
+# A single-node "all-in-one" alternative is shown commented out below the
+# multi-node services. Pick one or the other, not both.
+
+x-sanson-image: &sanson-image
+  image: ${IMAGE:-ghcr.io/sebprunier/sanson:edge}
+
+x-sanson-env: &sanson-env
+  DATABASE_URL: postgresql://sanson:sanson@db:5432/sanson
+  PORT: '3000'
+  UPLOAD_DIR: /app/uploads
+  ADMIN_UI_DIR: /app/admin-ui
+
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: sanson
+      POSTGRES_USER: sanson
+      POSTGRES_PASSWORD: sanson
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ../scripts/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U sanson -d sanson']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    <<: *sanson-image
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      <<: *sanson-env
+      NODE_MODE: api
+    ports:
+      - '3000:3000'
+    volumes:
+      # Shared with the worker — both processes need the same file tree.
+      # Replace this volume with object storage once the S3 backend ships
+      # (see https://github.com/sebprunier/sanson/issues/7).
+      - uploads:/app/uploads
+
+  worker:
+    <<: *sanson-image
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      <<: *sanson-env
+      NODE_MODE: worker
+    volumes:
+      - uploads:/app/uploads
+
+  # Single-node alternative: comment out api + worker above and uncomment
+  # this service to run everything in one process. Useful for small setups.
+  #
+  # all-in-one:
+  #   <<: *sanson-image
+  #   restart: unless-stopped
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
+  #   environment:
+  #     <<: *sanson-env
+  #     NODE_MODE: all
+  #   ports:
+  #     - '3000:3000'
+  #   volumes:
+  #     - uploads:/app/uploads
+
+volumes:
+  db_data:
+  uploads:

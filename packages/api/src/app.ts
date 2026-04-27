@@ -1,7 +1,10 @@
 import Fastify, { FastifyInstance } from 'fastify'
 import fastifySwagger from '@fastify/swagger'
+import fastifyStatic from '@fastify/static'
 import { Pool } from 'pg'
 import PgBoss from 'pg-boss'
+import { existsSync, statSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { rootRoutes } from './routes/root'
 import { conformanceRoutes } from './routes/conformance'
 import { collectionsRoutes } from './routes/collections'
@@ -21,6 +24,9 @@ interface AppOptions {
   logger?: boolean
   boss?: PgBoss
   maxFileSizeMb?: number
+  /** Absolute path to the built admin UI (apps/admin/dist). If set and the
+   * directory exists, it is served at /admin/* with an SPA fallback. */
+  adminUiDir?: string
 }
 
 export function buildApp(db: Pool, options: AppOptions = {}): FastifyInstance {
@@ -60,6 +66,23 @@ export function buildApp(db: Pool, options: AppOptions = {}): FastifyInstance {
   app.register(healthRoutes, { db })
   app.register(adminHealthRoutes, { db })
   app.register(adminConfigRoutes, { db })
+
+  if (options.adminUiDir) {
+    const dir = resolve(options.adminUiDir)
+    if (existsSync(dir) && statSync(dir).isDirectory()) {
+      app.register(fastifyStatic, {
+        root: dir,
+        prefix: '/admin/',
+      })
+      // SPA fallback: any /admin/* route that didn't match a file returns index.html
+      app.setNotFoundHandler((request, reply) => {
+        if (request.url.startsWith('/admin')) {
+          return reply.sendFile('index.html')
+        }
+        reply.status(404).send({ statusCode: 404, error: 'Not Found' })
+      })
+    }
+  }
 
   return app
 }
