@@ -32,7 +32,7 @@ interface ItemsResponse {
   features: GeoJsonFeature[]
 }
 
-const TABS = ['map', 'table', 'schema', 'history', 'settings', 'style', 'api', 'export'] as const
+const TABS = ['map', 'data', 'schema', 'history', 'settings', 'style', 'api'] as const
 type Tab = (typeof TABS)[number]
 
 function isTab(value: string | undefined): value is Tab {
@@ -85,8 +85,8 @@ export function CollectionDetail() {
         <TabButton active={tab === 'map'} onClick={() => setTab('map')}>
           Map
         </TabButton>
-        <TabButton active={tab === 'table'} onClick={() => setTab('table')}>
-          Table
+        <TabButton active={tab === 'data'} onClick={() => setTab('data')}>
+          Data
         </TabButton>
         <TabButton active={tab === 'schema'} onClick={() => setTab('schema')}>
           Schema
@@ -103,9 +103,6 @@ export function CollectionDetail() {
         <TabButton active={tab === 'api'} onClick={() => setTab('api')}>
           API
         </TabButton>
-        <TabButton active={tab === 'export'} onClick={() => setTab('export')}>
-          Export
-        </TabButton>
       </div>
 
       {tab === 'map' && (
@@ -116,13 +113,12 @@ export function CollectionDetail() {
           style={collection.style}
         />
       )}
-      {tab === 'table' && <TableView collectionId={collectionId} />}
+      {tab === 'data' && <DataView collection={collection} collectionId={collectionId} />}
       {tab === 'schema' && <SchemaView collectionId={collection.id} />}
       {tab === 'history' && <HistoryView collectionId={collection.id} />}
       {tab === 'settings' && <SettingsView collection={collection} onUpdate={setCollection} />}
       {tab === 'style' && <StyleView collection={collection} onUpdate={setCollection} />}
       {tab === 'api' && <ApiView collection={collection} collectionId={collectionId} />}
-      {tab === 'export' && <ExportView collection={collection} />}
     </div>
   )
 }
@@ -470,18 +466,37 @@ function formatNum(n: number): string {
     : n.toLocaleString(undefined, { maximumFractionDigits: 2 })
 }
 
-function TableView({ collectionId }: { collectionId: string }) {
+const EXPORT_FORMATS = [
+  { value: 'geojson', label: 'GeoJSON', extension: '.geojson', mime: 'application/geo+json' },
+  { value: 'csv', label: 'CSV', extension: '.csv', mime: 'text/csv;charset=utf-8' },
+] as const
+
+type ExportFormat = (typeof EXPORT_FORMATS)[number]['value']
+
+function DataView({ collection, collectionId }: { collection: Collection; collectionId: string }) {
   const [items, setItems] = useState<ItemsResponse | null>(null)
   const [offset, setOffset] = useState(0)
   const [filter, setFilter] = useState('')
   const [appliedFilter, setAppliedFilter] = useState('')
+  const [bbox, setBbox] = useState('')
+  const [appliedBbox, setAppliedBbox] = useState('')
   const [filterError, setFilterError] = useState('')
   const limit = 20
+
+  // Export popover state
+  const [exportOpen, setExportOpen] = useState(false)
+  const [exportFormat, setExportFormat] = useState<ExportFormat>('geojson')
+  const [exportLimitInput, setExportLimitInput] = useState('')
+  const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState('')
+  const [exportInfo, setExportInfo] = useState('')
+  const exportRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     setFilterError('')
     const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
     if (appliedFilter) params.set('filter', appliedFilter)
+    if (appliedBbox) params.set('bbox', appliedBbox)
     fetch(`/collections/${collectionId}/items?${params}`)
       .then(async (r) => {
         if (!r.ok) {
@@ -494,23 +509,97 @@ function TableView({ collectionId }: { collectionId: string }) {
       .then((data) => {
         if (data) setItems(data)
       })
-  }, [collectionId, offset, appliedFilter])
+  }, [collectionId, offset, appliedFilter, appliedBbox])
+
+  // Close export popover on outside click
+  useEffect(() => {
+    if (!exportOpen) return
+    const onClick = (e: MouseEvent) => {
+      if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
+        setExportOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onClick)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [exportOpen])
 
   const handleFilterSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     setOffset(0)
-    setAppliedFilter(filter)
+    setAppliedFilter(filter.trim())
+    setAppliedBbox(bbox.trim())
+    setExportInfo('')
   }
 
-  const handleClearFilter = () => {
+  const handleClearFilters = () => {
     setFilter('')
+    setBbox('')
     setAppliedFilter('')
+    setAppliedBbox('')
     setOffset(0)
+    setExportInfo('')
+  }
+
+  const handleExport = async () => {
+    setExportError('')
+    setExportInfo('')
+    setExporting(true)
+    try {
+      const params: { filter?: string; bbox?: string; limit?: number; format: ExportFormat } = {
+        format: exportFormat,
+      }
+      if (appliedFilter) params.filter = appliedFilter
+      if (appliedBbox) params.bbox = appliedBbox
+      if (exportLimitInput.trim()) {
+        const n = parseInt(exportLimitInput.trim(), 10)
+        if (isNaN(n) || n <= 0) {
+          setExportError('Limit must be a positive integer')
+          setExporting(false)
+          return
+        }
+        params.limit = n
+      }
+
+      const fmt = EXPORT_FORMATS.find((f) => f.value === exportFormat) ?? EXPORT_FORMATS[0]
+      const url = api.collections.exportUrl(collection.id, params)
+      const res = await fetch(url)
+      if (!res.ok) {
+        const body = await res.json().catch(() => null)
+        throw new Error(body?.message ?? `HTTP ${res.status}`)
+      }
+
+      let blob: Blob
+      let count: number
+      if (exportFormat === 'geojson') {
+        const data = await res.json()
+        count = data.features?.length ?? 0
+        blob = new Blob([JSON.stringify(data, null, 2)], { type: fmt.mime })
+      } else {
+        const text = await res.text()
+        const lines = text.split(/\r\n|\r|\n/).filter((l) => l.length > 0)
+        count = Math.max(0, lines.length - 1)
+        blob = new Blob([text], { type: fmt.mime })
+      }
+
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = `${collection.workspace_name}_${collection.name}${fmt.extension}`
+      a.click()
+      URL.revokeObjectURL(a.href)
+
+      setExportInfo(`${count.toLocaleString()} feature${count !== 1 ? 's' : ''} exported`)
+      setExportOpen(false)
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setExporting(false)
+    }
   }
 
   if (!items) return <div className="animate-pulse h-48 bg-gray-200 rounded-lg" />
 
   const columns = items.features.length > 0 ? Object.keys(items.features[0].properties) : []
+  const hasFilters = !!(appliedFilter || appliedBbox)
 
   return (
     <div>
@@ -521,6 +610,13 @@ function TableView({ collectionId }: { collectionId: string }) {
           onChange={(e) => setFilter(e.target.value)}
           placeholder="CQL2 filter, e.g. name='Paris'"
           className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+        />
+        <input
+          type="text"
+          value={bbox}
+          onChange={(e) => setBbox(e.target.value)}
+          placeholder="bbox: minLon,minLat,maxLon,maxLat"
+          className="w-72 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
         />
         <button
           type="submit"
@@ -541,10 +637,10 @@ function TableView({ collectionId }: { collectionId: string }) {
           </svg>
           Filter
         </button>
-        {appliedFilter && (
+        {hasFilters && (
           <button
             type="button"
-            onClick={handleClearFilter}
+            onClick={handleClearFilters}
             className="px-3 py-1.5 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
           >
             Clear
@@ -552,7 +648,7 @@ function TableView({ collectionId }: { collectionId: string }) {
         )}
       </form>
       <p className="text-xs text-gray-400 mb-3">
-        Uses{' '}
+        Filter with{' '}
         <a
           href="https://docs.ogc.org/is/21-065r2/21-065r2.html"
           target="_blank"
@@ -561,19 +657,98 @@ function TableView({ collectionId }: { collectionId: string }) {
         >
           CQL2
         </a>{' '}
-        syntax — e.g. <code className="bg-gray-100 px-1 rounded text-xs">name LIKE 'Paris%'</code>,{' '}
-        <code className="bg-gray-100 px-1 rounded text-xs">population &gt; 10000</code>,{' '}
-        <code className="bg-gray-100 px-1 rounded text-xs">status IN ('active','pending')</code>
+        — e.g. <code className="bg-gray-100 px-1 rounded text-xs">name LIKE 'Paris%'</code>,{' '}
+        <code className="bg-gray-100 px-1 rounded text-xs">population &gt; 10000</code>. Bounding
+        box uses WGS84 lon/lat (optional).
       </p>
       {filterError && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-2 text-sm text-red-700 mb-3">
           {filterError}
         </div>
       )}
-      <p className="text-sm text-gray-500 mb-3">
-        Showing {items.numberReturned} of {items.numberMatched} features
-        {appliedFilter && <span className="ml-1 text-primary-600">— filtered</span>}
-      </p>
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-sm text-gray-500">
+          Showing {items.numberReturned} of {items.numberMatched} features
+          {hasFilters && <span className="ml-1 text-primary-600">— filtered</span>}
+          {exportInfo && <span className="ml-2 text-green-600">— {exportInfo}</span>}
+        </p>
+        <div className="relative" ref={exportRef}>
+          <button
+            type="button"
+            onClick={() => setExportOpen((v) => !v)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            <DownloadIcon />
+            Export
+            <svg
+              className="w-3 h-3"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2.5}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+            </svg>
+          </button>
+          {exportOpen && (
+            <div className="absolute right-0 mt-1 w-72 bg-white shadow-lg rounded-lg border border-gray-200 p-4 z-10">
+              <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                Format
+              </h4>
+              <div className="flex gap-2 mb-4">
+                {EXPORT_FORMATS.map((f) => (
+                  <button
+                    key={f.value}
+                    type="button"
+                    onClick={() => setExportFormat(f.value)}
+                    className={`flex-1 px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+                      exportFormat === f.value
+                        ? 'bg-primary-50 border-primary-300 text-primary-700'
+                        : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+              <label
+                htmlFor="export-popover-limit"
+                className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2"
+              >
+                Limit (optional)
+              </label>
+              <input
+                id="export-popover-limit"
+                type="number"
+                min={1}
+                value={exportLimitInput}
+                onChange={(e) => setExportLimitInput(e.target.value)}
+                placeholder="No limit"
+                className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+              <p className="text-xs text-gray-500 mb-3">
+                {hasFilters
+                  ? 'Current filters will be applied.'
+                  : 'No filter — exports the full collection.'}
+              </p>
+              {exportError && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-2 text-sm text-red-700 mb-3">
+                  {exportError}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={handleExport}
+                disabled={exporting}
+                className="w-full inline-flex items-center justify-center gap-1.5 bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-800 disabled:opacity-50 transition-colors"
+              >
+                <DownloadIcon />
+                {exporting ? 'Exporting...' : 'Download'}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
       <div className="bg-white rounded-lg border border-gray-200 overflow-auto max-h-[500px]">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-gray-50">
@@ -615,7 +790,8 @@ function TableView({ collectionId }: { collectionId: string }) {
           Previous
         </button>
         <span className="text-sm text-gray-500">
-          Page {Math.floor(offset / limit) + 1} of {Math.ceil(items.numberMatched / limit)}
+          Page {Math.floor(offset / limit) + 1} of{' '}
+          {Math.max(1, Math.ceil(items.numberMatched / limit))}
         </span>
         <button
           disabled={offset + limit >= items.numberMatched}
@@ -1614,181 +1790,6 @@ function DownloadSmallIcon() {
         d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3"
       />
     </svg>
-  )
-}
-
-const EXPORT_FORMATS = [
-  { value: 'geojson', label: 'GeoJSON', extension: '.geojson', mime: 'application/geo+json' },
-  { value: 'csv', label: 'CSV', extension: '.csv', mime: 'text/csv;charset=utf-8' },
-] as const
-
-type ExportFormat = (typeof EXPORT_FORMATS)[number]['value']
-
-function ExportView({ collection }: { collection: Collection }) {
-  const [filter, setFilter] = useState('')
-  const [bbox, setBbox] = useState('')
-  const [limit, setLimit] = useState('')
-  const [format, setFormat] = useState<ExportFormat>('geojson')
-  const [exporting, setExporting] = useState(false)
-  const [error, setError] = useState('')
-  const [resultInfo, setResultInfo] = useState('')
-
-  const handleExport = async () => {
-    setError('')
-    setResultInfo('')
-    setExporting(true)
-    try {
-      const params: { filter?: string; bbox?: string; limit?: number } = {}
-      if (filter.trim()) params.filter = filter.trim()
-      if (bbox.trim()) params.bbox = bbox.trim()
-      if (limit.trim()) {
-        const n = parseInt(limit.trim(), 10)
-        if (isNaN(n) || n <= 0) {
-          setError('Limit must be a positive integer')
-          setExporting(false)
-          return
-        }
-        params.limit = n
-      }
-
-      const fmt = EXPORT_FORMATS.find((f) => f.value === format) ?? EXPORT_FORMATS[0]
-      const url = api.collections.exportUrl(collection.id, { ...params, format })
-      const res = await fetch(url)
-      if (!res.ok) {
-        const body = await res.json().catch(() => null)
-        throw new Error(body?.message ?? `HTTP ${res.status}`)
-      }
-
-      let blob: Blob
-      let count: number
-      if (format === 'geojson') {
-        const data = await res.json()
-        count = data.features?.length ?? 0
-        blob = new Blob([JSON.stringify(data, null, 2)], { type: fmt.mime })
-      } else {
-        const text = await res.text()
-        const lines = text.split(/\r\n|\r|\n/).filter((l) => l.length > 0)
-        count = Math.max(0, lines.length - 1)
-        blob = new Blob([text], { type: fmt.mime })
-      }
-
-      const a = document.createElement('a')
-      a.href = URL.createObjectURL(blob)
-      a.download = `${collection.workspace_name}_${collection.name}${fmt.extension}`
-      a.click()
-      URL.revokeObjectURL(a.href)
-
-      setResultInfo(`${count.toLocaleString()} feature${count !== 1 ? 's' : ''} exported`)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setExporting(false)
-    }
-  }
-
-  return (
-    <div className="space-y-6">
-      <div className="bg-white rounded-lg border border-gray-200 p-5">
-        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">Format</h2>
-        <div className="flex gap-3">
-          {EXPORT_FORMATS.map((f) => (
-            <button
-              key={f.value}
-              onClick={() => setFormat(f.value)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
-                format === f.value
-                  ? 'bg-primary-50 border-primary-300 text-primary-700'
-                  : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="bg-white rounded-lg border border-gray-200 p-5">
-        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">
-          Filters
-        </h2>
-        <p className="text-xs text-gray-400 mb-4">
-          Optional — leave empty to export the entire collection.
-        </p>
-        <div className="space-y-4 max-w-xl">
-          <div>
-            <label htmlFor="export-filter" className="block text-sm font-medium text-gray-700 mb-1">
-              CQL2 filter
-            </label>
-            <input
-              id="export-filter"
-              type="text"
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              placeholder="e.g. name='Paris'"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-            />
-            <p className="text-xs text-gray-400 mt-1">
-              <a
-                href="https://docs.ogc.org/is/21-065r2/21-065r2.html"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary-500 hover:underline"
-              >
-                CQL2 documentation
-              </a>{' '}
-              — e.g. <code className="bg-gray-100 px-1 rounded">name='Paris'</code>,{' '}
-              <code className="bg-gray-100 px-1 rounded">population &gt; 10000</code>
-            </p>
-          </div>
-          <div>
-            <label htmlFor="export-bbox" className="block text-sm font-medium text-gray-700 mb-1">
-              Bounding box
-            </label>
-            <input
-              id="export-bbox"
-              type="text"
-              value={bbox}
-              onChange={(e) => setBbox(e.target.value)}
-              placeholder="minLon,minLat,maxLon,maxLat"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-            />
-          </div>
-          <div>
-            <label htmlFor="export-limit" className="block text-sm font-medium text-gray-700 mb-1">
-              Limit
-            </label>
-            <input
-              id="export-limit"
-              type="number"
-              min={1}
-              value={limit}
-              onChange={(e) => setLimit(e.target.value)}
-              placeholder="No limit"
-              className="w-40 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-            />
-            <p className="text-xs text-gray-400 mt-1">Maximum number of features to export</p>
-          </div>
-        </div>
-      </div>
-
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
-          {error}
-        </div>
-      )}
-
-      <div className="flex items-center gap-3">
-        <button
-          onClick={handleExport}
-          disabled={exporting}
-          className="inline-flex items-center gap-1.5 bg-primary-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-primary-800 disabled:opacity-50 transition-colors"
-        >
-          <DownloadIcon />
-          {exporting ? 'Exporting...' : 'Export'}
-        </button>
-        {resultInfo && <span className="text-sm text-green-600 font-medium">{resultInfo}</span>}
-      </div>
-    </div>
   )
 }
 
