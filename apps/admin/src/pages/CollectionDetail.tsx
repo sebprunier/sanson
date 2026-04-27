@@ -151,15 +151,15 @@ function TabButton({
 }
 
 const BASEMAPS = {
-  osm: {
-    label: 'OSM',
-    tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-    attribution: '&copy; OpenStreetMap contributors',
-  },
   light: {
     label: 'Light',
     tiles: ['https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'],
     attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+  },
+  osm: {
+    label: 'OSM',
+    tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+    attribution: '&copy; OpenStreetMap contributors',
   },
   satellite: {
     label: 'Satellite',
