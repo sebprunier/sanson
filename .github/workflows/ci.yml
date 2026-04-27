@@ -39,7 +39,10 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @sanson/api build
+      # Build API and its workspace dependencies (@sanson/core, @sanson/worker)
+      # in dependency order so the .d.ts files exist when tsc resolves the
+      # `@sanson/*` imports.
+      - run: pnpm --filter "@sanson/api..." build
 
   test:
     name: Tests
