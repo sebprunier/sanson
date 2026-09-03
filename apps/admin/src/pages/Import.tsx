@@ -4,6 +4,7 @@ import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { api } from '../services/api'
 import type { Workspace, ImportAccepted, JobStatus, PreviewResult } from '../services/api'
+import { basemapStyle } from '../utils/basemaps'
 
 export function Import() {
   const navigate = useNavigate()
@@ -642,15 +643,7 @@ function PreviewMap({
       container: mapContainer.current,
       style: {
         version: 8,
-        sources: {
-          basemap: {
-            type: 'raster',
-            tiles: ['https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'],
-            tileSize: 256,
-            attribution: '&copy; OSM &copy; CARTO',
-          },
-        },
-        layers: [{ id: 'basemap', type: 'raster', source: 'basemap' }],
+        ...basemapStyle('light'),
       },
       center: [2.3, 46.8],
       zoom: 5,

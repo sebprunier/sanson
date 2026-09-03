@@ -17,6 +17,12 @@ import {
   interpolatePalette,
   type PaletteName,
 } from '../utils/styleToMaplibre'
+import {
+  BASEMAPS,
+  basemapStyle,
+  setBasemap as applyBasemap,
+  type BasemapId,
+} from '../utils/basemaps'
 
 interface GeoJsonFeature {
   id: number
@@ -147,28 +153,6 @@ function TabButton({
   )
 }
 
-const BASEMAPS = {
-  light: {
-    label: 'Light',
-    tiles: ['https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'],
-    attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-  },
-  osm: {
-    label: 'OSM',
-    tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-    attribution: '&copy; OpenStreetMap contributors',
-  },
-  satellite: {
-    label: 'Satellite',
-    tiles: [
-      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    ],
-    attribution: 'Tiles &copy; Esri',
-  },
-} as const
-
-type BasemapId = keyof typeof BASEMAPS
-
 function parseBbox(bbox: string | number[] | null): number[] | null {
   if (!bbox) return null
   try {
@@ -250,21 +234,12 @@ function MapView({
   useEffect(() => {
     if (!mapContainer.current) return
 
-    const initialBasemap = BASEMAPS.light
     const dv = defaultViewRef.current
     const map = new maplibregl.Map({
       container: mapContainer.current,
       style: {
         version: 8,
-        sources: {
-          basemap: {
-            type: 'raster',
-            tiles: initialBasemap.tiles as unknown as string[],
-            tileSize: 256,
-            attribution: initialBasemap.attribution,
-          },
-        },
-        layers: [{ id: 'basemap', type: 'raster', source: 'basemap' }],
+        ...basemapStyle('light'),
       },
       center: dv ? [dv.lon, dv.lat] : [2.3, 46.8],
       zoom: dv ? dv.zoom : 5,
@@ -327,20 +302,11 @@ function MapView({
     const map = mapRef.current
     if (!map) return
     const apply = () => {
-      const bm = BASEMAPS[basemap]
-      if (map.getLayer('basemap')) map.removeLayer('basemap')
-      if (map.getSource('basemap')) map.removeSource('basemap')
-      map.addSource('basemap', {
-        type: 'raster',
-        tiles: bm.tiles as unknown as string[],
-        tileSize: 256,
-        attribution: bm.attribution,
-      })
       // Insert basemap below all feature layers
       const firstFeatureLayer = ['features-fill', 'features-line', 'features-circle'].find((lid) =>
         map.getLayer(lid),
       )
-      map.addLayer({ id: 'basemap', type: 'raster', source: 'basemap' }, firstFeatureLayer)
+      applyBasemap(map, basemap, firstFeatureLayer)
     }
     if (map.isStyleLoaded()) apply()
     else map.once('load', apply)
